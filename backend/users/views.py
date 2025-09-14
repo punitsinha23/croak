@@ -3,16 +3,17 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.views import APIView
 from rest_framework import generics, status
 from rest_framework_simplejwt.tokens import RefreshToken
-from .serializers import RegisterSerilizer, LoginSerializer
+from .serializers import RegisterSerializer, LoginSerializer, UserSerializer
 from django.contrib.auth import get_user_model
 from rest_framework.response import Response
 from rest_framework import permissions
+from rest_framework import generics
 
 User = get_user_model()
 
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
-    serializer_class = RegisterSerilizer
+    serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
 
 class LoginView(APIView):
@@ -33,10 +34,13 @@ class LoginView(APIView):
         return Response({
             'refresh': str(refresh),
             'access': str(refresh.access_token),
-            'user':{
-                "id": user.id,
-                'username' : user.username,
-                'email': user.email,
-                'bio': user.bio,
-            }
         })
+
+class UserProfileView(generics.RetrieveAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        serializer = UserSerializer(request.user)
+        return Response(serializer.data)
+
+        
