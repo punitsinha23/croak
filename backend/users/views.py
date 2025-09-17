@@ -43,4 +43,6 @@ class UserProfileView(generics.RetrieveAPIView):
         serializer = UserSerializer(request.user)
         return Response(serializer.data)
 
-        
+class listApiView(generics.ListAPIView):
+    queryset = User.objects.all()
+    serializer_class = UserSerializer
