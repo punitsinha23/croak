@@ -46,3 +46,10 @@ class UserProfileView(generics.RetrieveAPIView):
 class listApiView(generics.ListAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
+
+class EditProfileView(generics.RetrieveUpdateAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user

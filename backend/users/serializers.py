@@ -10,7 +10,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('username', 'email', 'password', 'password2', 'location', 'bio', 'profile_pic')
+        fields = ('username', 'first_name', 'email', 'password', 'password2', 'location', 'bio', 'profile_pic')
 
     def validate(self, attrs):
         if attrs['password'] != attrs['password2']:
@@ -23,6 +23,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
         user = User.objects.create_user(
         username=validated_data['username'],
+        first_name=validated_data['first_name'],
         email=validated_data.get('email', ''),
         password=password,
         bio=validated_data.get('bio', ''),
@@ -42,5 +43,18 @@ class LoginSerializer(serializers.Serializer):
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["id", "username", "email", "bio", "profile_pic", "location", "join_date"]
+        fields = ["id", "username", "first_name","email", "bio", "profile_pic", "location", "join_date"]
+
+        def update( self , instance , validated_data):
+            instance.username = validated_data.get('username', instance.username)
+            instance.first_name = validated_data.get('first_name')
+            instance.email = validated_data.get('email', instance.email)
+            instance.bio = validated_data.get('bio', instance.bio)
+            instance.location = validated_data.get('location', instance.location)
+            if validated_data.get('profile_pic'):
+                instance.profile_pic = validated_data.get('profile_pic')
+            instance.save()
+            return instance
+
+            
 
