@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from rest_framework.response import Response
 from rest_framework import permissions
 from rest_framework import generics
+from rest_framework.views import APIView
 
 User = get_user_model()
 
@@ -46,6 +47,7 @@ class UserProfileView(generics.RetrieveAPIView):
 class listApiView(generics.ListAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
 class EditProfileView(generics.RetrieveUpdateAPIView):
     serializer_class = UserSerializer
@@ -53,3 +55,38 @@ class EditProfileView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return self.request.user
+    
+
+
+class FollowUnfollowView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, username):
+        """
+        Toggle following/unfollowing a user.
+        """
+        try:
+            target_user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+        
+        user = request.user
+
+        if target_user == user:
+            return Response({"error": "You cannot follow yourself"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if target_user in user.following.all():
+            # Already following → unfollow
+            user.following.remove(target_user)
+            return Response({"status": "unfollowed"})
+        else:
+            # Not following → follow
+            user.following.add(target_user)
+            return Response({
+                "status": "followed",
+                "following_count": user.following.count(),
+                "followers_count": target_user.followers.count()
+            })
+
+
+

@@ -1,24 +1,38 @@
 from rest_framework import serializers
-from .models import Ribbit, Comment
+from .models import Ribbit, Comment, Notification
 from users.serializers import UserSerializer
+from django.contrib.auth import get_user_model
 
+User = get_user_model()
+
+class MinimalUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["id", "username", "first_name", "profile_pic" , "bio", "location"]
 
 class PostSerializer(serializers.ModelSerializer):
-    author = UserSerializer(read_only=True)
+    author = MinimalUserSerializer(read_only=True)
     likes_count = serializers.SerializerMethodField()
     is_liked = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
+    repost = serializers.SerializerMethodField()
+    reribbit_count = serializers.SerializerMethodField()  # 👈 added here
 
-    
     class Meta:
         model = Ribbit
-        fields = ['id', 'author', 'text', 'created_at', 'parent', 
-                  'is_reribbit', 'reribbit_of', 
-                  'likes_count', 'reply_count', 'reribbit_count', 'is_liked']
-        read_only_fields = ['author', 'created_at', 
-                            'likes_count', 'reply_count', 'reribbit_count', 'is_liked']
-        
+        fields = [
+            'id', 'author', 'text', 'created_at', 'parent',
+            'is_reribbit', 'reribbit_of',
+            'likes_count', 'reply_count', 'reribbit_count',
+            'is_liked', 'comment_count', 'media', 'repost'
+        ]
+        read_only_fields = [
+            'author', 'created_at', 'likes_count', 'reply_count',
+            'reribbit_count', 'is_liked', 'comment_count', 'repost'
+        ]
+
     def get_likes_count(self, obj):
-        return obj.likes.count() 
+        return obj.likes.count()
 
     def get_is_liked(self, obj):
         annotated = getattr(obj, "is_liked", None)
@@ -29,6 +43,26 @@ class PostSerializer(serializers.ModelSerializer):
         if user and user.is_authenticated:
             return obj.likes.filter(user=user).exists()
         return False
+
+    def get_comment_count(self, obj):
+        return obj.comments.count()
+
+    def get_repost(self, obj):
+        if obj.parent:
+            return PostSerializer(obj.parent, context=self.context).data
+        return None
+
+    def get_reribbit_count(self, obj):   # 👈 NEW
+        return Ribbit.objects.filter(parent=obj).count()
+
+
+    
+class RepostSerializer(serializers.ModelSerializer):
+    repost_text = serializers.CharField(required=False, allow_blank=True)
+
+    class Meta:
+        model = Ribbit
+        fields = ['repost_text'] 
 
 class CommentSerializer(serializers.ModelSerializer):
     author = UserSerializer(read_only=True)
@@ -43,3 +77,55 @@ class CommentSerializer(serializers.ModelSerializer):
         validated_data["author"] = request.user
         validated_data["ribbit"] = Ribbit.objects.get(pk=ribbit_id)
         return super().create(validated_data)    
+    
+
+class PublicUserSerializer(serializers.ModelSerializer):
+    ribbits = PostSerializer(many=True, read_only=True)
+    followers_count = serializers.SerializerMethodField()
+    following_count = serializers.SerializerMethodField()
+    is_following = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            "id", "username", "first_name", "bio", "profile_pic",
+            "location", "join_date", "ribbits", "banner",
+            "followers_count", "following_count", "is_following"
+        ]
+
+    def get_followers_count(self, obj):
+        return obj.followers.count() 
+
+    def get_following_count(self, obj):
+        return obj.following.count()
+    
+    def get_is_following( self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return request.user.following.filter(id=obj.id).exists()
+        return False
+    
+class NotificationSerializer(serializers.ModelSerializer):
+    sender_username = serializers.CharField(source="sender.username", read_only=True)
+    sender_profile_pic = serializers.ImageField(source="sender.profile_pic", read_only=True)
+    receiver_username = serializers.CharField(source="receiver.username", read_only=True)
+    post_id = serializers.IntegerField(source="post.id", read_only=True)
+    post = serializers.CharField(source="post.text", read_only=True)
+
+    class Meta:
+        model = Notification
+        fields = [
+            "id",
+            "sender",
+            "sender_username",
+            "sender_profile_pic",
+            "receiver",
+            "receiver_username",
+            "notif_type",  
+            "post",
+            "post_id",      
+            "message",      
+            "is_read",
+            "created_at",   
+        ]
+        read_only_fields = ["id", "created_at", "sender_username", "receiver_username"]

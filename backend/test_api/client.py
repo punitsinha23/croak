@@ -3,11 +3,12 @@ import requests
 BASE_URL = "http://127.0.0.1:8000/api/users/"
 
 
-def register(username, email, password, password2, location, bio=""):
+def register(username, first_name, email, password, password2, location, bio=""):
     if password2 is None:
         password2 = password
     payload = {
         "username": username,
+        "first_name" : first_name,
         "email": email,
         "password": password,
         "password2": password2,
@@ -16,6 +17,8 @@ def register(username, email, password, password2, location, bio=""):
     }
     response = requests.post(BASE_URL + "register/", json=payload)
     print("REGISTER:", response.status_code, response.json())
+    print("STATUS:", response.status_code)
+    print("TEXT:", response.text)
 
 
 def login(username, password):
@@ -38,18 +41,25 @@ def get_user_profile(access_token):
         print(f"❌ Error {response.status_code}: {response.text}")
 
 
-def post_ribbit(access_token, text="this is a test ribbit"):
+def post_ribbit(access_token, text="this is a test ribbit", media_path=None):
     url = "http://127.0.0.1:8000/api/ribbit/post/"
     headers = {"Authorization": f"Bearer {access_token}"}
-    payload = {"text": text}
 
-    response = requests.post(url, headers=headers, json=payload)
+    data = {"text": text}
+    files = None
+
+    if media_path:
+        files = {"media": open(media_path, "rb")}
+
+    response = requests.post(url, headers=headers, data=data, files=files)
+
+    if files:
+        files["media"].close()
 
     if response.status_code in (200, 201):
         print("✅ Ribbit posted:")
-        data = response.json()
-        print(data)
-        return data
+        print(response.json())
+        return response.json()
     else:
         print(f"❌ Error {response.status_code}: {response.text}")
         return None
@@ -128,13 +138,68 @@ def test_comments(access_token, ribbit_id):
     else:
         print(f"❌ Failed to fetch comments ({response.status_code}): {response.text}")
 
+def search_user(access_token, username):
+    url = f"http://127.0.0.1:8000/api/ribbit/search/{username}/"
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    response = requests.get(url, headers=headers)
+
+    if response.status_code == 200:
+        data = response.json()
+        print(f"✅ Search results for '{username}':")
+        print(data)
+        return data
+    else:
+        print(f"❌ Error {response.status_code}: {response.text}")
+        return None
+    
+def follow_user(access_token, username):
+    url = f"http://127.0.0.1:8000/api/users/{username}/follow/"
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    response = requests.post(url, headers=headers)
+
+    if response.status_code in (200, 201):
+        print("✅ Follow action success:")
+        print(response.json())
+        return response.json()
+    else:
+        print(f"❌ Error {response.status_code}: {response.text}")
+        return None    
+
+def repost_ribbit(access_token, ribbit_id, opinion="", media_path=None):
+    """
+    Repost a ribbit with optional opinion text and optional media.
+    """
+    url = f"http://127.0.0.1:8000/api/ribbit/{ribbit_id}/repost/"
+    headers = {"Authorization": f"Bearer {access_token}"}
+
+    data = {"repost_text": opinion}
+    files = None
+
+    if media_path:
+        files = {"media": open(media_path, "rb")}  # multipart upload
+
+    response = requests.post(url, headers=headers, data=data, files=files)
+
+    if files:
+        files["media"].close()
+
+    if response.status_code in (200, 201):
+        print("✅ Ribbit reposted successfully:")
+        print(response.json())
+        return response.json()
+    else:
+        print(f"❌ Error {response.status_code}: {response.text}")
+        return None
 
 
 if __name__ == "__main__":
     # Step 1: Register
     register(
-        username="testuser4",
-        email="test4@example.com",
+        username="testuser5",
+        first_name = "testuser5",
+        email="test5@example.com",
         password="SuperStrongPass123",
         password2="SuperStrongPass123",
         location="Mumbai",
@@ -142,7 +207,7 @@ if __name__ == "__main__":
     )
 
     # Step 2: Login
-    tokens = login("testuser4", "SuperStrongPass123")
+    tokens = login("testuser5", "SuperStrongPass123")
     access_token = tokens.get("access")
     print("Access token:", access_token)
 
@@ -172,4 +237,12 @@ if __name__ == "__main__":
             # Step 7: Test comments
             print("\n--- Testing comments ---")
             test_comments(access_token, ribbit_id)
+
+            print("\n--- Searching user 'punit' ---")
+            search_user(access_token, "punit")
+
+            print("\n--- following' ---")
+            follow_user(access_token, "sheela")
+            print("\n--- Reposting ribbit ---")
+            repost_result = repost_ribbit(access_token, ribbit_id, "This is my opinion on this ribbit!")
 

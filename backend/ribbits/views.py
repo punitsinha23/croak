@@ -1,6 +1,6 @@
 from rest_framework import generics
-from .serializers import PostSerializer, CommentSerializer
-from .models import Ribbit, Like, Comment
+from .serializers import PostSerializer, CommentSerializer, PublicUserSerializer, NotificationSerializer, RepostSerializer
+from .models import Ribbit, Like, Comment, Notification
 from rest_framework import permissions
 from rest_framework.response import Response
 from rest_framework import status
@@ -12,6 +12,7 @@ from django.db import models
 from django.db.models import Q
 from users.serializers import UserSerializer
 from django.conf import settings
+from rest_framework.parsers import MultiPartParser, FormParser
 
 
 User = get_user_model()
@@ -19,6 +20,7 @@ class PostApiView(generics.CreateAPIView):
     queryset = Ribbit.objects.all()
     serializer_class = PostSerializer
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser] 
     
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
@@ -172,5 +174,51 @@ class CommentApiView(generics.ListCreateAPIView):
         ribbit_id = self.kwargs.get('pk')
         serializer.save(author=self.request.user, ribbit_id=ribbit_id)
 
+class UserDetailApiView(generics.RetrieveAPIView):
+    queryset = User.objects.all()
+    serializer_class = PublicUserSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser] 
+    lookup_field = 'username'
+
+    def get_serializer_context(self):
+        # Include the request so SerializerMethodField can access it
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
 
 
+class NotificationListView(generics.ListAPIView):
+    serializer_class = NotificationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Notification.objects.filter(receiver=self.request.user)
+
+
+class RepostApiView(generics.CreateAPIView):
+    serializer_class = RepostSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Ribbit.objects.all()
+    
+    def perform_create(self, serializer):
+        original_post_id = self.kwargs.get('pk')
+        original_post = Ribbit.objects.get(pk=original_post_id)
+
+        new_post = Ribbit.objects.create(
+        author=self.request.user,
+        text=serializer.validated_data.get('repost_text', ''),
+        is_reribbit=True,
+        reribbit_of=original_post,
+        parent=original_post
+        )
+        self.instance = new_post  # store instance for response
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        out_serializer = PostSerializer(self.instance, context={'request': request})
+        return Response(out_serializer.data)
