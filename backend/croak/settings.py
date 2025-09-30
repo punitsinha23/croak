@@ -163,7 +163,6 @@ CSRF_TRUSTED_ORIGINS = [
 ]
 
 CORS_ALLOWED_ORIGINS = [
-    'localhost'
     'https://croak-green-shine-e75y.vercel.app'
 ]
 
