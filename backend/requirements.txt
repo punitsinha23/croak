@@ -1,5 +1,8 @@
-django
+Django
 djangorestframework
+djangorestframework-simplejwt
+django-cors-headers
 gunicorn
-psycopg2-binary   
 whitenoise
+psycopg2-binary
+python-dotenv
