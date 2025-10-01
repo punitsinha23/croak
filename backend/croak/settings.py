@@ -30,7 +30,7 @@ SECRET_KEY = 'django-insecure-4l-eiqt@9@(d#zykk*f-drqol*qr#wr9@l66$3t_*!+1bxy#b%
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['croak-bqg0.onrender.com' , 'localhost']
+ALLOWED_HOSTS = ['croak-bqg0.onrender.com' , 'localhost' , '127.0.0.1']
 
 
 # Application definition
@@ -162,10 +162,12 @@ CORS_ALLOW_ALL_ORIGINS = True
 AUTH_USER_MODEL = "users.User"
 
 CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:8080',
     "https://croak-green-shine-e75y.vercel.app",
 ]
 
 CORS_ALLOWED_ORIGINS = [
+    'http://localhost:8080',
     'https://croak-green-shine-e75y.vercel.app'
 ]
 
