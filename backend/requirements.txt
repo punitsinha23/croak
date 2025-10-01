@@ -8,3 +8,4 @@ psycopg2-binary
 python-dotenv
 dj_database_url
 Pillow
+django-cloudinary-storage
