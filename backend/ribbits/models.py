@@ -1,13 +1,14 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
+from cloudinary.models import CloudinaryField
 
 User = settings.AUTH_USER_MODEL
 
 class Ribbit(models.Model):
     author = models.ForeignKey(User, related_name='ribbits', on_delete=models.CASCADE)
     text = models.CharField(max_length=500, blank=True)
-    media = models.FileField(upload_to="ribbit_media/", null=True, blank=True)  
+    media = CloudinaryField('media', folder="ribbit_media", null=True, blank=True)  
     media_type = models.CharField(max_length=20, null=True, blank=True)  
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
 
