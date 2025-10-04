@@ -184,20 +184,4 @@ CLOUDINARY_STORAGE = {
 }
 
 
-# settings.py
-
-# Email backend
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-
-# SMTP server details
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-
-# Your email account
-EMAIL_HOST_USER = "sinhapunit323@gmail.com"  # the email that will send notifications
-EMAIL_HOST_PASSWORD = os.getenv("APP_PASSWORD") # Gmail App Password, not your normal password
-
-# Default from email
-DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
