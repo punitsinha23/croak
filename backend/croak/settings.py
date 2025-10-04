@@ -196,7 +196,7 @@ EMAIL_USE_TLS = True
 
 # Your email account
 EMAIL_HOST_USER = "sinhapunit323@gmail.com"  # the email that will send notifications
-EMAIL_HOST_PASSWORD = 'wovm svdc kbac ctpj' # Gmail App Password, not your normal password
+EMAIL_HOST_PASSWORD = os.getenv("APP_PASSWORD") # Gmail App Password, not your normal password
 
 # Default from email
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
