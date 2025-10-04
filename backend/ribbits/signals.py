@@ -55,8 +55,8 @@ def comment_notification(sender, instance, created, **kwargs):
             )
 
             subject = "New Comment on Your Ribbit"
-            text_msg = f"{commenter.username} commented on your ribbit: '{instance.ribbit.content[:50]}...'"
-            html_msg = f"{commenter.username} commented on your ribbit: '<b>{instance.ribbit.content[:50]}...</b>'"
+            text_msg = f"{commenter.username} commented on your ribbit: '{instance.ribbit.text[:50]}...'"
+            html_msg = f"{commenter.username} commented on your ribbit: '<b>{instance.ribbit.text[:50]}...</b>'"
             
             send_notification_email(subject, text_msg, html_msg, author.email)
 
