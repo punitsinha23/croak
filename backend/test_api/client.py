@@ -3,12 +3,12 @@ import requests
 BASE_URL = "http://127.0.0.1:8000/api/users/"
 
 
-def register(username, first_name, email, password, password2, location, bio=""):
+def register(username, first_name, email, password, password2=None, location="", bio=""):
     if password2 is None:
         password2 = password
     payload = {
         "username": username,
-        "first_name" : first_name,
+        "first_name": first_name,
         "email": email,
         "password": password,
         "password2": password2,
@@ -16,233 +16,49 @@ def register(username, first_name, email, password, password2, location, bio="")
         "bio": bio,
     }
     response = requests.post(BASE_URL + "register/", json=payload)
-    print("REGISTER:", response.status_code, response.json())
-    print("STATUS:", response.status_code)
-    print("TEXT:", response.text)
+    print("REGISTER:", response.status_code, response.text)
+    return response.json() if response.status_code in (200, 201) else None
 
 
 def login(username, password):
     payload = {"username": username, "password": password}
     response = requests.post(BASE_URL + "login/", json=payload)
-    print("LOGIN:", response.status_code, response.json())
-    return response.json()
+    print("LOGIN:", response.status_code, response.text)
+    return response.json() if response.status_code == 200 else None
 
 
-def get_user_profile(access_token):
-    url = BASE_URL + "me/"
-    headers = {"Authorization": f"Bearer {access_token}"}
-
-    response = requests.get(url, headers=headers)
-
-    if response.status_code == 200:
-        print("✅ User profile data:")
-        print(response.json())
-    else:
-        print(f"❌ Error {response.status_code}: {response.text}")
-
-
-def post_ribbit(access_token, text="this is a test ribbit", media_path=None):
-    url = "http://127.0.0.1:8000/api/ribbit/post/"
-    headers = {"Authorization": f"Bearer {access_token}"}
-
-    data = {"text": text}
-    files = None
-
-    if media_path:
-        files = {"media": open(media_path, "rb")}
-
-    response = requests.post(url, headers=headers, data=data, files=files)
-
-    if files:
-        files["media"].close()
-
-    if response.status_code in (200, 201):
-        print("✅ Ribbit posted:")
-        print(response.json())
-        return response.json()
-    else:
-        print(f"❌ Error {response.status_code}: {response.text}")
-        return None
-
-
-def update_ribbit(access_token, ribbit_id, new_text="updated ribbit text"):
-    # ⚠️ Change this endpoint if your backend uses a different route for update
-    url = f"http://127.0.0.1:8000/api/ribbit/update/{ribbit_id}/"
-    headers = {"Authorization": f"Bearer {access_token}"}
-    payload = {"text": new_text}
-
-    response = requests.patch(url, headers=headers, json=payload)
-
-    if response.status_code in (200, 202):
-        print("✅ Ribbit updated:")
-        print(response.json())
-    else:
-        print(f"❌ Error {response.status_code}: {response.text}")
-
-
-def like_ribbit(access_token, ribbit_id):
-    url = f"http://127.0.0.1:8000/api/ribbit/ribbits/{ribbit_id}/like/"
+def follow_user(access_token, username_to_follow):
+    url = f"{BASE_URL}{username_to_follow}/follow/"
     headers = {"Authorization": f"Bearer {access_token}"}
 
     response = requests.post(url, headers=headers)
-
     if response.status_code in (200, 201):
-        print("✅ Like action success:")
-        print(response.json())  # shows {"status": "liked"/"unliked", "likes_count": N}
-        return response.json()
-    else:
-        print(f"❌ Error {response.status_code}: {response.text}")
-        return None
-
-def get_liked_ribbits(access_token):
-    url = "http://127.0.0.1:8000/api/ribbit/liked/"
-    headers = {"Authorization": f"Bearer {access_token}"}
-
-    response = requests.get(url, headers=headers)
-
-    if response.status_code == 200:
-        data = response.json()
-        print("✅ Liked ribbits:")
-        for ribbit in data.get("results", data):  # handle pagination or plain list
-            print(f"- ID {ribbit['id']}: {ribbit['text']} (likes={ribbit['likes_count']}, is_liked={ribbit['is_liked']})")
-        return data
-    else:
-        print(f"❌ Error {response.status_code}: {response.text}")
-        return None
-
-def test_comments(access_token, ribbit_id):
-    url = f"http://127.0.0.1:8000/api/ribbit/ribbits/{ribbit_id}/comment/"
-    headers = {"Authorization": f"Bearer {access_token}"}
-
-    # 1. Post a new comment
-    payload = {"text": "This is a test comment"}
-    response = requests.post(url, headers=headers, json=payload)
-
-    if response.status_code in (200, 201):
-        print("✅ Comment posted successfully:")
-        comment_data = response.json()
-        print(comment_data)
-    else:
-        print(f"❌ Failed to post comment ({response.status_code}): {response.text}")
-        return
-
-    # 2. Fetch all comments for that ribbit
-    response = requests.get(url, headers=headers)
-
-    if response.status_code == 200:
-        data = response.json()
-        comments = data.get("results", [])  # <- access paginated results
-        print("✅ Comments fetched:")
-        for c in comments:
-            print(f"- ID {c.get('id', 'N/A')}: {c['text']} (author={c['author']['username']})")
-    else:
-        print(f"❌ Failed to fetch comments ({response.status_code}): {response.text}")
-
-def search_user(access_token, username):
-    url = f"http://127.0.0.1:8000/api/ribbit/search/{username}/"
-    headers = {"Authorization": f"Bearer {access_token}"}
-
-    response = requests.get(url, headers=headers)
-
-    if response.status_code == 200:
-        data = response.json()
-        print(f"✅ Search results for '{username}':")
-        print(data)
-        return data
-    else:
-        print(f"❌ Error {response.status_code}: {response.text}")
-        return None
-    
-def follow_user(access_token, username):
-    url = f"http://127.0.0.1:8000/api/users/{username}/follow/"
-    headers = {"Authorization": f"Bearer {access_token}"}
-
-    response = requests.post(url, headers=headers)
-
-    if response.status_code in (200, 201):
-        print("✅ Follow action success:")
+        print(f"✅ Successfully followed {username_to_follow}")
         print(response.json())
         return response.json()
     else:
-        print(f"❌ Error {response.status_code}: {response.text}")
-        return None    
-
-def repost_ribbit(access_token, ribbit_id, opinion="", media_path=None):
-    """
-    Repost a ribbit with optional opinion text and optional media.
-    """
-    url = f"http://127.0.0.1:8000/api/ribbit/{ribbit_id}/repost/"
-    headers = {"Authorization": f"Bearer {access_token}"}
-
-    data = {"repost_text": opinion}
-    files = None
-
-    if media_path:
-        files = {"media": open(media_path, "rb")}  # multipart upload
-
-    response = requests.post(url, headers=headers, data=data, files=files)
-
-    if files:
-        files["media"].close()
-
-    if response.status_code in (200, 201):
-        print("✅ Ribbit reposted successfully:")
-        print(response.json())
-        return response.json()
-    else:
-        print(f"❌ Error {response.status_code}: {response.text}")
+        print(f"❌ Failed to follow {username_to_follow}: {response.status_code}, {response.text}")
         return None
 
 
 if __name__ == "__main__":
-    # Step 1: Register
+    # Step 1: Register with your email
     register(
-        username="testuser5",
-        first_name = "testuser5",
-        email="test5@example.com",
+        username="punit_test_user",
+        first_name="Punit",
+        email="punitsinha1542004@gmail.com",
         password="SuperStrongPass123",
         password2="SuperStrongPass123",
         location="Mumbai",
-        bio="This is my bio",
+        bio="Testing notifications!"
     )
 
     # Step 2: Login
-    tokens = login("testuser5", "SuperStrongPass123")
-    access_token = tokens.get("access")
+    tokens = login("punit_test_user", "SuperStrongPass123")
+    access_token = tokens.get("access") if tokens else None
     print("Access token:", access_token)
 
-    # Step 3: Run flow only if login worked
+    # Step 3: Follow a real user
     if access_token:
-        # Fetch profile
-        get_user_profile(access_token)
-
-        # Step 4: Post a ribbit
-        ribbit = post_ribbit(access_token, "liking another ribbit test")
-        if ribbit:
-            ribbit_id = ribbit.get("id")
-
-            # Step 5: Like the ribbit
-            print("\n--- Liking ribbit ---")
-            like_result = like_ribbit(access_token, ribbit_id)
-
-            if like_result and like_result.get("status") == "liked":
-                print(f"✅ Ribbit {ribbit_id} liked. Likes count: {like_result.get('likes_count')}")
-            else:
-                print("❌ Like action did not work as expected.")
-
-            # Step 6: Fetch liked ribbits
-            print("\n--- Fetching liked ribbits ---")
-            liked_posts = get_liked_ribbits(access_token)
-
-            # Step 7: Test comments
-            print("\n--- Testing comments ---")
-            test_comments(access_token, ribbit_id)
-
-            print("\n--- Searching user 'punit' ---")
-            search_user(access_token, "punit")
-
-            print("\n--- following' ---")
-            follow_user(access_token, "sheela")
-            print("\n--- Reposting ribbit ---")
-            repost_result = repost_ribbit(access_token, ribbit_id, "This is my opinion on this ribbit!")
-
+        # Replace 'realusername' with the username of an actual person in your DB
+        follow_user(access_token, "NotABot")
