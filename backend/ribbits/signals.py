@@ -34,8 +34,8 @@ def like_notification(sender, instance, created, **kwargs):
             )
 
             subject = "New Like on Your Ribbit"
-            text_msg = f"{instance.user.username} liked your ribbit: '{ribbit.content[:50]}...'"
-            html_msg = f"{instance.user.username} liked your ribbit: '<b>{ribbit.content[:50]}...</b>'"
+            text_msg = f"{instance.user.username} liked your ribbit: '{ribbit.text[:50]}...'"
+            html_msg = f"{instance.user.username} liked your ribbit: '<b>{ribbit.text[:50]}...</b>'"
             
             send_notification_email(subject, text_msg, html_msg, ribbit.author.email)
 
