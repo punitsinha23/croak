@@ -1,6 +1,7 @@
 import requests
 
 BASE_URL = "http://127.0.0.1:8000/api/users/"
+RIBBIT_URL = "http://127.0.0.1:8000/api/ribbit/"
 
 
 def register(username, first_name, email, password, password2=None, location="", bio=""):
@@ -27,38 +28,80 @@ def login(username, password):
     return response.json() if response.status_code == 200 else None
 
 
-def follow_user(access_token, username_to_follow):
-    url = f"{BASE_URL}{username_to_follow}/follow/"
+def create_ribbit(access_token, text="Testing like notifications 🚀"):
+    """Create a test ribbit post"""
     headers = {"Authorization": f"Bearer {access_token}"}
-
-    response = requests.post(url, headers=headers)
+    payload = {"text": text}
+    response = requests.post(RIBBIT_URL + "ribbits/", headers=headers, json=payload)
+    print("CREATE RIBBIT:", response.status_code, response.text)
     if response.status_code in (200, 201):
-        print(f"✅ Successfully followed {username_to_follow}")
-        print(response.json())
-        return response.json()
+        return response.json().get("id")
+    return None
+
+
+def like_ribbit(access_token, ribbit_id):
+    """Like a specific ribbit"""
+    url = f"{RIBBIT_URL}ribbits/{ribbit_id}/like/"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    response = requests.post(url, headers=headers)
+    print("LIKE RIBBIT:", response.status_code, response.text)
+    if response.status_code in (200, 201):
+        print("✅ Successfully liked ribbit!")
     else:
-        print(f"❌ Failed to follow {username_to_follow}: {response.status_code}, {response.text}")
-        return None
+        print(f"❌ Failed to like ribbit: {response.status_code}, {response.text}")
+
+def follow(access_token, user_name):
+    """Like a specific ribbit"""
+    url = f"{BASE_URL}{user_name}/follow/"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    response = requests.post(url, headers=headers)
+    print("LIKE RIBBIT:", response.status_code, response.text)
+    if response.status_code in (200, 201):
+        print("✅ Successfully liked ribbit!")
+    else:
+        print(f"❌ Failed to like ribbit: {response.status_code}, {response.text}")  
+
+def comment(access_token, ribbit_id, text="Hey"):
+    """Comment on a specific ribbit"""
+    url = f"{RIBBIT_URL}ribbits/{ribbit_id}/comment/"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    payload = {"text": text}
+    response = requests.post(url, headers=headers, json=payload)
+    print("COMMENT RIBBIT:", response.status_code, response.text)
+    if response.status_code in (200, 201):
+        print("✅ Successfully commented on ribbit!")
+    else:
+        print(f"❌ Failed to comment on ribbit: {response.status_code}, {response.text}")
+
 
 
 if __name__ == "__main__":
-    # Step 1: Register with your email
+    # Step 1: Register two users
     register(
-        username="punit_test_user",
-        first_name="Punit",
-        email="punitsinha1542004@gmail.com",
-        password="SuperStrongPass123",
-        password2="SuperStrongPass123",
-        location="Mumbai",
-        bio="Testing notifications!"
+        username="like_tester",
+        first_name="Like",
+        email="like_tester@gmail.com",
+        password="StrongPass123",
+        password2="StrongPass123",
+        location="Delhi",
+        bio="Testing like notifications!"
     )
 
-    # Step 2: Login
-    tokens = login("punit_test_user", "SuperStrongPass123")
-    access_token = tokens.get("access") if tokens else None
-    print("Access token:", access_token)
+    register(
+        username="post_owner",
+        first_name="Owner",
+        email="post_owner@gmail.com",
+        password="StrongPass123",
+        password2="StrongPass123",
+        location="Pune",
+        bio="Will get a like notification!"
+    )
 
-    # Step 3: Follow a real user
-    if access_token:
-        # Replace 'realusername' with the username of an actual person in your DB
-        follow_user(access_token, "NotABot")
+
+    liker_tokens = login("like_tester", "StrongPass123")
+    liker_token = liker_tokens.get("access") if liker_tokens else None
+
+
+    like_ribbit(liker_token, 48)
+    follow(liker_token , "NotABot")
+    comment(liker_token, 48, "Nice ribbit!")
