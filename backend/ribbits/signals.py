@@ -1,32 +1,36 @@
 from django.db.models.signals import post_save, m2m_changed
 from django.dispatch import receiver
 from django.conf import settings
-from django.core.mail import EmailMultiAlternatives
 from django.contrib.auth import get_user_model
+from django.core.mail import EmailMultiAlternatives
 from .models import Like, Comment, Notification, Ribbit
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
 def send_email_notification(subject: str, message: str, recipient_email: str):
-    """Utility function to send email notifications safely."""
+    """Send email notifications asynchronously to avoid blocking requests."""
     if not recipient_email:
-        logger.info("No recipient email, skipping notification.")
+        logger.info("No recipient email provided; skipping.")
         return
 
-    try:
-        email = EmailMultiAlternatives(
-            subject=subject,
-            body=message,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            to=[recipient_email],
-        )
-        email.send(fail_silently=False)
-        logger.info(f"Email sent to {recipient_email}")
-    except Exception as e:
-        logger.error(f"Failed to send email to {recipient_email}: {e}")
+    def _send():
+        try:
+            email = EmailMultiAlternatives(
+                subject=subject,
+                body=message,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                to=[recipient_email],
+            )
+            email.send(fail_silently=True)
+            logger.info(f"Email sent to {recipient_email}")
+        except Exception as e:
+            logger.error(f"Failed to send email to {recipient_email}: {e}")
+
+    threading.Thread(target=_send, daemon=True).start()
 
 
 @receiver(post_save, sender=Like)
@@ -41,7 +45,7 @@ def like_notification(sender, instance, created, **kwargs):
     if receiver_user == sender_user:
         return
 
-    # In-app notification
+    # Create in-app notification
     Notification.objects.create(
         sender=sender_user,
         receiver=receiver_user,
@@ -50,7 +54,7 @@ def like_notification(sender, instance, created, **kwargs):
         message=f"{sender_user.username} liked your ribbit."
     )
 
-    # Email notification (fail-safe)
+    # Send email async
     subject = f"{sender_user.username} liked your ribbit!"
     message = (
         f"Hi {receiver_user.username},\n\n"
@@ -81,7 +85,7 @@ def comment_notification(sender, instance, created, **kwargs):
         message=f"{commenter.username} commented on your post."
     )
 
-    # Email notification
+    # Email notification async
     subject = f"New comment from {commenter.username}"
     message = (
         f"Hi {post_author.username},\n\n"
@@ -117,7 +121,7 @@ def follow_notification(sender, instance, action, reverse, pk_set, **kwargs):
             message=f"{instance.username} started following you."
         )
 
-        # Email notification
+        # Email notification async
         subject = f"{instance.username} started following you!"
         message = (
             f"Hi {followed_user.username},\n\n"
