@@ -168,13 +168,13 @@ AUTH_USER_MODEL = "users.User"
 CSRF_TRUSTED_ORIGINS = [
     'https://croak-bqg0.onrender.com',
     'http://localhost:8080',
-    "https://croak-green-shine-e75y.vercel.app",
+    "https://croak-green-shine.vercel.app",
 ]
 
 CORS_ALLOWED_ORIGINS = [
     'https://croak-bqg0.onrender.com',
     'http://localhost:8080',
-    'https://croak-green-shine-e75y.vercel.app'
+    'https://croak-green-shine.vercel.app'
 ]
 
 CLOUDINARY_STORAGE = {
