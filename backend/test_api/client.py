@@ -73,6 +73,17 @@ def comment(access_token, ribbit_id, text="Hey"):
     else:
         print(f"❌ Failed to comment on ribbit: {response.status_code}, {response.text}")
 
+def delete_comment(access_token, ribbit_id, comment_id):
+    """Delete a specific comment on a ribbit"""
+    url = f"{RIBBIT_URL}ribbits/{ribbit_id}/comment/{comment_id}/"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    response = requests.delete(url, headers=headers)
+    print("DELETE COMMENT:", response.status_code, response.text)
+
+    if response.status_code in (200, 204):
+        print("🗑️ Successfully deleted comment!")
+    else:
+        print(f"❌ Failed to delete comment: {response.status_code}, {response.text}")
 
 
 if __name__ == "__main__":
@@ -105,3 +116,5 @@ if __name__ == "__main__":
     like_ribbit(liker_token, 48)
     follow(liker_token , "NotABot")
     comment(liker_token, 48, "Nice ribbit!")
+    delete_comment(liker_token, ribbit_id=48, comment_id=12)
+

@@ -13,9 +13,15 @@ from django.db.models import Q
 from users.serializers import UserSerializer
 from django.conf import settings
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.pagination import CursorPagination
 
 
 User = get_user_model()
+
+class FeedPagination(CursorPagination):
+    page_size = 10
+    ordering = '-created_at'
+
 class PostApiView(generics.CreateAPIView):
     queryset = Ribbit.objects.all()
     serializer_class = PostSerializer
@@ -174,6 +180,15 @@ class CommentApiView(generics.ListCreateAPIView):
         ribbit_id = self.kwargs.get('pk')
         serializer.save(author=self.request.user, ribbit_id=ribbit_id)
 
+class CommentDeleteView(generics.DestroyAPIView):
+    queryset = Comment.objects.all()
+    permission_classes = [permissions.IsAuthenticated]
+
+    def delete(self, request, ribbit_id, comment_id):
+        comment = get_object_or_404(Comment, id=comment_id, ribbit_id=ribbit_id)
+        comment.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+       
 class UserDetailApiView(generics.RetrieveAPIView):
     queryset = User.objects.all()
     serializer_class = PublicUserSerializer

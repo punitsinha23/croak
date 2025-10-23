@@ -15,6 +15,7 @@ from datetime import timedelta
 from dotenv import load_dotenv
 import dj_database_url
 import os
+import ribbits
 
 load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -153,6 +154,9 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticatedOrReadOnly",
     ),
+
+    "DEFAULT_PAGINATION_CLASS": "ribbits.pagination.FeedPagination",
+    "PAGE_SIZE": 10, 
 }
 
 SIMPLE_JWT = {
