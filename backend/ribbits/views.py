@@ -197,7 +197,6 @@ class UserDetailApiView(generics.RetrieveAPIView):
     lookup_field = 'username'
 
     def get_serializer_context(self):
-        # Include the request so SerializerMethodField can access it
         context = super().get_serializer_context()
         context['request'] = self.request
         return context
