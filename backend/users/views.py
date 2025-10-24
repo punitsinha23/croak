@@ -10,9 +10,14 @@ from rest_framework import permissions
 from rest_framework import generics
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
+from ribbits.email_utils import send_resend_email
 
 User = get_user_model()
 
+def send_follow_email(user):
+    subject = "New Follower"
+    html = f"<h2>Hey You Have A New Follower</h2><p>🚀</p>"
+    send_resend_email(user.email, subject, html)
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
@@ -64,9 +69,6 @@ class FollowUnfollowView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request, username):
-        """
-        Toggle following/unfollowing a user.
-        """
         try:
             target_user = User.objects.get(username=username)
         except User.DoesNotExist:
@@ -84,11 +86,12 @@ class FollowUnfollowView(APIView):
         else:
             # Not following → follow
             user.following.add(target_user)
+
+            # send email to the person being followed
+            send_follow_email(target_user)
+
             return Response({
                 "status": "followed",
                 "following_count": user.following.count(),
                 "followers_count": target_user.followers.count()
             })
-
-
-
