@@ -29,12 +29,14 @@ class PostSerializer(serializers.ModelSerializer):
     repost = serializers.SerializerMethodField()
     reribbit_count = serializers.SerializerMethodField()
     media_url = serializers.SerializerMethodField()
+    author_email = serializers.EmailField(source="author.email", read_only=True)
 
     class Meta:
         model = Ribbit
         fields = [
             "id",
             "author",
+            "author_email",
             "text",
             "created_at",
             "parent",
@@ -124,11 +126,13 @@ class PublicUserSerializer(serializers.ModelSerializer):
     is_following = serializers.SerializerMethodField()
     profile_pic_url = serializers.SerializerMethodField()
     banner_url = serializers.SerializerMethodField()
+    email = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             "id",
+            "email",
             "username",
             "first_name",
             "bio",
@@ -163,6 +167,9 @@ class PublicUserSerializer(serializers.ModelSerializer):
         if obj.banner:
             return obj.banner.url
         return None
+    
+    def get_email(self, obj):
+        return obj.email if obj.email else None
 
 
 # ---------- NOTIFICATIONS ----------

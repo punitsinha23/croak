@@ -86,10 +86,9 @@ class LikeApiView(APIView):
         ribbit = get_object_or_404(Ribbit, pk=pk)
         like, created = Like.objects.get_or_create(ribbit=ribbit, user=request.user)
 
-        if not created:  # already liked → unlike
+        if not created: 
             like.delete()
 
-        # always serialize after like/unlike
         serializer = PostSerializer(ribbit, context={"request": request})
 
         return Response(
@@ -228,7 +227,7 @@ class RepostApiView(generics.CreateAPIView):
         reribbit_of=original_post,
         parent=original_post
         )
-        self.instance = new_post  # store instance for response
+        self.instance = new_post  
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
