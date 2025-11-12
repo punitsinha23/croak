@@ -171,12 +171,14 @@ AUTH_USER_MODEL = "users.User"
 
 CSRF_TRUSTED_ORIGINS = [
     'https://croak-bqg0.onrender.com',
+    'https://croak-notifications.vercel.app',
     'http://localhost:8080',
     "https://croak-green-shine.vercel.app",
 ]
 
 CORS_ALLOWED_ORIGINS = [
     'https://croak-bqg0.onrender.com',
+    'https://croak-notifications.vercel.app',
     'http://localhost:8080',
     'https://croak-green-shine.vercel.app'
 ]
