@@ -25,7 +25,7 @@ def generate_otp():
 def send_otp_email(email, otp):
     """Send OTP to the email using external mail service."""
     res = requests.post(
-        "http://localhost:8081/send-otp-email",
+        "https://croak-notifications.vercel.app/send-otp-email",
         json={"to": email, "otp": otp},
     )
     return res.status_code == 200

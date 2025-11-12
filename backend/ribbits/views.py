@@ -133,7 +133,7 @@ class LikedRibbitsApiView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         return (
-            Ribbit.objects.filter(likes__user=user)   # only liked by current user
+            Ribbit.objects.filter(likes__user=user)   
             .annotate(likes_count=Count("likes"))
             .order_by("-created_at")
         )
