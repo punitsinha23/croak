@@ -16,7 +16,7 @@ from rest_framework_simplejwt.views import (
 
 urlpatterns = [
     path("register/", RegisterView.as_view(), name="register"),
-    path("verify-otp/", VerifyOtpView.as_view(), name="verify_otp"),  # 👈 new route
+    path("verify-otp/", VerifyOtpView.as_view(), name="verify_otp"),  
     path("login/", LoginView.as_view(), name="login"),
     path("me/", UserProfileView.as_view(), name="user-profile"),
     path("users/", listApiView.as_view(), name="user-list"),
