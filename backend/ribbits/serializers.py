@@ -1,7 +1,8 @@
 from rest_framework import serializers
-from .models import Ribbit, Comment, Notification
+from .models import Ribbit, Comment, Notification, Reply
 from users.serializers import UserSerializer
 from django.contrib.auth import get_user_model
+import cloudinary
 
 User = get_user_model()
 
@@ -13,7 +14,6 @@ class MinimalUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["id", "username", "first_name", "bio", "location", "profile_pic_url"]
-
     def get_profile_pic_url(self, obj):
         if obj.profile_pic:
             return obj.profile_pic.url
@@ -62,6 +62,32 @@ class PostSerializer(serializers.ModelSerializer):
             "repost",
             "media_url",
         ]
+
+    def validate_media(self, file):
+        print("VALIDATE MEDIA:", file, file.content_type if hasattr(file, "content_type") else None)
+
+        if not file:
+            return file
+
+        upload = cloudinary.uploader.upload(
+            file,
+            resource_type="video",
+            folder="ribbit_media_temp",
+        )
+
+        print("UPLOAD RESPONSE:", upload)
+
+        duration = upload.get("duration", 0)
+
+        if duration > 30:
+            cloudinary.uploader.destroy(upload["public_id"], resource_type="video")
+            raise serializers.ValidationError("Video must be 15 seconds or shorter.")
+
+        cloudinary.uploader.destroy(upload["public_id"], resource_type="video")
+
+        return file
+
+
 
     def get_likes_count(self, obj):
         return obj.likes.count()
@@ -117,6 +143,13 @@ class CommentSerializer(serializers.ModelSerializer):
         validated_data["ribbit"] = Ribbit.objects.get(pk=ribbit_id)
         return super().create(validated_data)
 
+class replyserializer(serializers.ModelSerializer):
+    author = UserSerializer(read_only=True)
+
+    class Meta:
+        model = Reply
+        fields = ["id" , "comment", "author", "text", "created_at"]
+        read_only_fields = ["comment", "author", "created_at"]
 
 # ---------- PUBLIC USER ----------
 class PublicUserSerializer(serializers.ModelSerializer):

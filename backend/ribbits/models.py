@@ -9,7 +9,7 @@ User = settings.AUTH_USER_MODEL
 class Ribbit(models.Model):
     author = models.ForeignKey(User, related_name='ribbits', on_delete=models.CASCADE)
     text = models.CharField(max_length=500, blank=True)
-    media = CloudinaryField('media', folder="ribbit_media", null=True, blank=True)  
+    media = CloudinaryField('media', folder="ribbit_media", resource_type='auto', null=True, blank=True)  
     media_type = models.CharField(max_length=20, null=True, blank=True)  
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
 
@@ -49,6 +49,12 @@ class Like(models.Model):
 class Comment(models.Model):
     ribbit = models.ForeignKey(Ribbit, related_name="comments", on_delete=models.CASCADE)
     author = models.ForeignKey(User, related_name="comments", on_delete=models.CASCADE)
+    text = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+class Reply(models.Model):
+    comment = models.ForeignKey(Comment, related_name="replies", on_delete=models.CASCADE)
+    author = models.ForeignKey(User, related_name="replies", on_delete=models.CASCADE)
     text = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
 

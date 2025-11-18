@@ -1,5 +1,5 @@
 from rest_framework import generics
-from .serializers import PostSerializer, CommentSerializer, PublicUserSerializer, NotificationSerializer, RepostSerializer
+from .serializers import PostSerializer, CommentSerializer, PublicUserSerializer, NotificationSerializer, RepostSerializer, replyserializer
 from .models import Ribbit, Like, Comment, Notification
 from rest_framework import permissions
 from rest_framework.response import Response
@@ -187,6 +187,19 @@ class CommentDeleteView(generics.DestroyAPIView):
         comment = get_object_or_404(Comment, id=comment_id, ribbit_id=ribbit_id)
         comment.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+    
+class replyApiView(generics.ListCreateAPIView):
+    serializer_class = replyserializer
+    permission_classes = [permissions.IsAuthenticated]
+    def get_queryset(self):
+        return super().get_queryset().filter(comment_id=self.kwargs['comment_id']).order_by('-created_at')
+    def perform_create(self, serializer):
+        serializer.save(
+            author=self.request.user,
+            comment=Comment.objects.get(pk=self.kwargs["comment_id"])
+        )
+
+        
        
 class UserDetailApiView(generics.RetrieveAPIView):
     queryset = User.objects.all()

@@ -2,7 +2,7 @@ from django.urls import path
 from .views import (PostApiView, RetrieveMyRibbitView, 
                     ListRibbitApiView, DeleteUpdateRibbitApiView, 
                     LikeApiView, LikedRibbitsApiView, SearchApiView,
-                    CommentApiView, UserDetailApiView, NotificationListView, RepostApiView, CommentDeleteView
+                    CommentApiView, UserDetailApiView, NotificationListView, RepostApiView, CommentDeleteView, replyApiView
                     )
 
 urlpatterns = [
@@ -14,6 +14,7 @@ urlpatterns = [
     path("feed/" , ListRibbitApiView.as_view(), name='feed'),
     path("liked/", LikedRibbitsApiView.as_view(), name="liked-ribbits"),
     path("ribbits/<int:pk>/comment/", CommentApiView.as_view(), name='comments'),
+    path("comments/<int:comment_id>/replies/", replyApiView.as_view(), name="comment-replies"),
     path("ribbits/<int:ribbit_id>/comment/<int:comment_id>/", CommentDeleteView.as_view(), name='delete_comment'),
     path("search/", SearchApiView.as_view(), name='search'),
     path('search/<str:username>/', UserDetailApiView.as_view(), name='search-user'),
