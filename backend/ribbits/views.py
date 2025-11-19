@@ -14,6 +14,11 @@ from users.serializers import UserSerializer
 from django.conf import settings
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.pagination import CursorPagination
+import requests
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAdminUser
+
+
 
 
 User = get_user_model()
@@ -248,3 +253,31 @@ class RepostApiView(generics.CreateAPIView):
         self.perform_create(serializer)
         out_serializer = PostSerializer(self.instance, context={'request': request})
         return Response(out_serializer.data)
+    
+
+def send_update_email(subject, message):
+    emails = list(
+        User.objects.filter(is_active=True)
+        .exclude(email__isnull=True)
+        .exclude(email__exact="")
+        .values_list("email", flat=True)
+    )
+    print(emails)
+
+    payload = {
+        "subject": subject,
+        "message": message,
+        "recipients": emails,
+    }
+
+    r = requests.post("https://croak-notifications.vercel.app/send-bulk", json=payload)
+    return r.json()
+
+@api_view(["POST"])
+@permission_classes([IsAdminUser])
+def announce_update(request):
+    subject = request.data.get("subject")
+    message = request.data.get("message")
+
+    result = send_update_email(subject, message)
+    return Response(result)
