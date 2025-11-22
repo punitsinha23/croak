@@ -94,7 +94,7 @@ DATABASES = {
     )
 }
 
-print("DATABASE_URL:", os.getenv("DATABASE_URL"))
+# print("DATABASE_URL:", os.getenv("DATABASE_URL"))
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -166,7 +166,7 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-CORS_ALLOW_ALL_ORIGINS = True 
+CORS_ALLOW_ALL_ORIGINS = False 
 
 AUTH_USER_MODEL = "users.User"
 
@@ -197,7 +197,7 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = "sinhapunit323@gmail.com"
 EMAIL_HOST_PASSWORD = os.getenv("APP_PASSWORD")
 DEFAULT_FROM_EMAIL = "sinhapunit323@gmail.com"
-print(EMAIL_HOST_PASSWORD)
+# print(EMAIL_HOST_PASSWORD)
 
 
 

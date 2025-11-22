@@ -18,11 +18,14 @@ class User(AbstractUser):
     def __str__(self):
         return self.username
 
+def get_expiration():
+    return timezone.now() + timedelta(minutes=5)
+
 class OTP(models.Model):
     email = models.EmailField(unique=True)
     otp = models.CharField(max_length=6)
     created_at = models.DateTimeField(default=timezone.now)
-    expires_at = models.DateTimeField(default=timezone.now() + timedelta(minutes=5))
+    expires_at = models.DateTimeField(default=get_expiration)
     is_verfied = models.BooleanField(default=False)
 
     def __str__(self):

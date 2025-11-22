@@ -1,6 +1,6 @@
 from rest_framework import generics
 from .serializers import PostSerializer, CommentSerializer, PublicUserSerializer, NotificationSerializer, RepostSerializer, replyserializer
-from .models import Ribbit, Like, Comment, Notification
+from .models import Ribbit, Like, Comment, Notification, Reply
 from rest_framework import permissions
 from rest_framework.response import Response
 from rest_framework import status
@@ -195,6 +195,7 @@ class CommentDeleteView(generics.DestroyAPIView):
     
 class replyApiView(generics.ListCreateAPIView):
     serializer_class = replyserializer
+    queryset = Reply.objects.all()
     permission_classes = [permissions.IsAuthenticated]
     def get_queryset(self):
         return super().get_queryset().filter(comment_id=self.kwargs['comment_id']).order_by('-created_at')
@@ -262,7 +263,7 @@ def send_update_email(subject, message):
         .exclude(email__exact="")
         .values_list("email", flat=True)
     )
-    print(emails)
+    # print(emails)
 
     payload = {
         "subject": subject,

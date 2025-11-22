@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework_simplejwt.tokens import RefreshToken
+import os
 
 from .serializers import RegisterSerializer, LoginSerializer, UserSerializer
 from .models import OTP
@@ -25,7 +26,7 @@ def generate_otp():
 def send_otp_email(email, otp):
     """Send OTP to the email using external mail service."""
     res = requests.post(
-        "https://croak-notifications.vercel.app/send-otp-email",
+        f"{os.getenv('NOTIFICATIONS_SERVICE_URL', 'https://croak-notifications.vercel.app')}/send-otp-email",
         json={"to": email, "otp": otp},
     )
     return res.status_code == 200
