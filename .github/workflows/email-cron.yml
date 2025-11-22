@@ -1,0 +1,41 @@
+name: Email Queue Processor
+
+on:
+  schedule:
+    # Process email queue every 5 minutes
+    - cron: '*/5 * * * *'
+    
+    # Send daily digests at 9 AM UTC
+    - cron: '0 9 * * *'
+  
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  process-email-queue:
+    runs-on: ubuntu-latest
+    # Run every 5 minutes
+    if: github.event.schedule == '*/5 * * * *' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Process Pending Emails
+        run: |
+          curl -X POST "${{ secrets.BACKEND_URL }}/api/ribbit/cron/process-emails/" \
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json"
+      
+      - name: Check Queue Stats
+        run: |
+          curl -X GET "${{ secrets.BACKEND_URL }}/api/ribbit/cron/stats/?secret=${{ secrets.CRON_SECRET }}"
+
+  send-daily-digests:
+    runs-on: ubuntu-latest
+    # Run once daily at 9 AM
+    if: github.event.schedule == '0 9 * * *' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Generate Daily Digests
+        run: |
+          curl -X POST "${{ secrets.BACKEND_URL }}/api/ribbit/cron/daily-digest/" \
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json"
