@@ -77,4 +77,72 @@ class Notification(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["-created_at"]    
+        ordering = ["-created_at"]
+
+
+class EmailQueue(models.Model):
+    """Queue for emails to be sent asynchronously"""
+    EMAIL_TYPES = [
+        ('instant', 'Instant Notification'),
+        ('digest', 'Daily Digest'),
+        ('weekly', 'Weekly Summary'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('processing', 'Processing'),
+        ('sent', 'Sent'),
+        ('failed', 'Failed'),
+    ]
+    
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='email_queue')
+    email_type = models.CharField(max_length=20, choices=EMAIL_TYPES)
+    subject = models.CharField(max_length=255)
+    body_html = models.TextField()
+    body_text = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', db_index=True)
+    priority = models.IntegerField(default=5, db_index=True)  # 1=highest, 10=lowest
+    scheduled_for = models.DateTimeField(default=timezone.now, db_index=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    error_message = models.TextField(blank=True)
+    retry_count = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['priority', 'scheduled_for']
+        indexes = [
+            models.Index(fields=['status', 'scheduled_for']),
+            models.Index(fields=['recipient', 'email_type']),
+        ]
+    
+    def __str__(self):
+        return f"{self.email_type} to {self.recipient.username} - {self.status}"
+
+
+class EmailPreferences(models.Model):
+    """User email notification preferences"""
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='email_preferences')
+    
+    # Instant notifications
+    email_on_like = models.BooleanField(default=True)
+    email_on_comment = models.BooleanField(default=True)
+    email_on_follow = models.BooleanField(default=True)
+    email_on_mention = models.BooleanField(default=True)
+    email_on_reply = models.BooleanField(default=True)
+    
+    # Digest emails
+    daily_digest = models.BooleanField(default=True)
+    weekly_summary = models.BooleanField(default=False)
+    
+    # Timing preferences
+    digest_time = models.TimeField(default='09:00:00')  # 9 AM
+    timezone = models.CharField(max_length=50, default='UTC')
+    
+    # Master switch
+    email_enabled = models.BooleanField(default=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"Email preferences for {self.user.username}"

@@ -4,6 +4,8 @@ from .views import (PostApiView, RetrieveMyRibbitView,
                     LikeApiView, LikedRibbitsApiView, SearchApiView,
                     CommentApiView, UserDetailApiView, NotificationListView, RepostApiView, CommentDeleteView, replyApiView, announce_update
                     )
+from .email_serializers import EmailPreferencesViewSet
+from .cron_views import process_email_queue_endpoint, send_daily_digests_endpoint, email_queue_stats
 
 urlpatterns = [
     path("post/", PostApiView.as_view(), name="post"),
@@ -21,5 +23,11 @@ urlpatterns = [
     path("notifications/", NotificationListView.as_view(), name="notifications"),
     path('<int:pk>/repost/', RepostApiView.as_view(), name='repost-with-opinion'),
     path('announce-update/', announce_update, name='announce-update'),
+    path('email-preferences/', EmailPreferencesViewSet.as_view({'get': 'retrieve', 'put': 'update', 'patch': 'partial_update'}), name='email-preferences'),
+    
+    # Cron endpoints
+    path('cron/process-emails/', process_email_queue_endpoint, name='cron-process-emails'),
+    path('cron/daily-digest/', send_daily_digests_endpoint, name='cron-daily-digest'),
+    path('cron/stats/', email_queue_stats, name='cron-stats'),
     ]
 

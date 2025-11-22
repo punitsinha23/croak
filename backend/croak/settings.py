@@ -197,7 +197,6 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = "sinhapunit323@gmail.com"
 EMAIL_HOST_PASSWORD = os.getenv("APP_PASSWORD")
 DEFAULT_FROM_EMAIL = "sinhapunit323@gmail.com"
-# print(EMAIL_HOST_PASSWORD)
 
-
-
+# Notifications Service
+NOTIFICATIONS_SERVICE_URL = os.getenv("NOTIFICATIONS_SERVICE_URL", "https://croak-notifications.vercel.app")
