@@ -63,6 +63,13 @@ class PostSerializer(serializers.ModelSerializer):
             "media_url",
         ]
 
+    def validate(self, attrs):
+        text = attrs.get('text', '')
+        media = attrs.get('media', None)
+        if not text and not media:
+            raise serializers.ValidationError("Either text or media must be provided.")
+        return attrs
+
     def validate_media(self, file):
         print("VALIDATE MEDIA:", file, file.content_type if hasattr(file, "content_type") else None)
 
@@ -90,6 +97,9 @@ class PostSerializer(serializers.ModelSerializer):
 
 
     def get_likes_count(self, obj):
+        annotated = getattr(obj, "likes_count", None)
+        if annotated is not None:
+            return annotated
         return obj.likes.count()
 
     def get_is_liked(self, obj):
@@ -103,6 +113,9 @@ class PostSerializer(serializers.ModelSerializer):
         return False
 
     def get_comment_count(self, obj):
+        annotated = getattr(obj, "comment_count", None)
+        if annotated is not None:
+            return annotated
         return obj.comments.count()
 
     def get_repost(self, obj):
@@ -110,8 +123,10 @@ class PostSerializer(serializers.ModelSerializer):
             return PostSerializer(obj.parent, context=self.context).data
         return None
 
+
     def get_reribbit_count(self, obj):
-        return Ribbit.objects.filter(parent=obj).count()
+        # Use the annotated value if available, otherwise fall back to the model field
+        return getattr(obj, "reribbit_count_annotated", getattr(obj, "reribbit_count", 0))
 
     def get_media_url(self, obj):
         if obj.media:
@@ -135,6 +150,9 @@ class CommentSerializer(serializers.ModelSerializer):
         model = Comment
         fields = ["id" , "ribbit", "author", "text", "created_at"]
         read_only_fields = ["ribbit", "author", "created_at"]
+        extra_kwargs = {
+            "text": {"required": True, "allow_blank": False}
+        }
 
     def create(self, validated_data):
         request = self.context["request"]
@@ -170,13 +188,13 @@ class PublicUserSerializer(serializers.ModelSerializer):
             "first_name",
             "bio",
             "location",
-            "join_date",
-            "ribbits",
+            "created_at",
             "profile_pic_url",
             "banner_url",
             "followers_count",
             "following_count",
             "is_following",
+            "ribbits",
         ]
 
     def get_followers_count(self, obj):

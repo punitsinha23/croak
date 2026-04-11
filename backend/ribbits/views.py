@@ -46,8 +46,11 @@ class RetrieveMyRibbitView(generics.ListAPIView):
         user = self.request.user
         return (
             Ribbit.objects.filter(author=user)
+            .select_related("author", "parent", "parent__author", "reribbit_of", "reribbit_of__author")
             .annotate(
                 likes_count=Count("likes", distinct=True),
+                comment_count=Count("comments", distinct=True),
+                reribbit_count_annotated=Count("replies", distinct=True), 
                 is_liked=Exists(
                     Like.objects.filter(ribbit=OuterRef("pk"), user=user)
                 )
@@ -70,7 +73,7 @@ class DeleteUpdateRibbitApiView(generics.RetrieveUpdateDestroyAPIView):
         if ribbit.author != request.user:
             return Response({"error": "You cannot delete someone else's ribbit."}, status=status.HTTP_403_FORBIDDEN)
         ribbit.delete()
-        return Response({"message": "Ribbit deleted."}, status=status.HTTP_200_OK)
+        return Response({"message": "Ribbit deleted."}, status=status.HTTP_204_NO_CONTENT)
     
     def patch(self, request, *args, **kwargs):
         ribbit = self.get_object()
@@ -114,10 +117,20 @@ class ListRibbitApiView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
+        queryset = Ribbit.objects.all()
+        
+        username = self.request.query_params.get("username")
+        if username:
+            queryset = queryset.filter(author__username=username)
+
         return (
-            Ribbit.objects.all()
+            queryset
+            .select_related("author", "parent", "parent__author", "reribbit_of", "reribbit_of__author")
+            .prefetch_related("likes", "comments")
             .annotate(
                 likes_count=Count("likes", distinct=True),
+                comment_count=Count("comments", distinct=True),
+                reribbit_count_annotated=Count("replies", distinct=True),
                 is_liked=Exists(
                     Like.objects.filter(ribbit=OuterRef("pk"), user=user)
                 ) if user.is_authenticated else models.Value(False, output_field=models.BooleanField())
@@ -138,8 +151,13 @@ class LikedRibbitsApiView(generics.ListAPIView):
     def get_queryset(self):
         user = self.request.user
         return (
-            Ribbit.objects.filter(likes__user=user)   
-            .annotate(likes_count=Count("likes"))
+            Ribbit.objects.filter(likes__user=user)
+            .select_related("author", "parent", "parent__author", "reribbit_of", "reribbit_of__author")
+            .annotate(
+                likes_count=Count("likes", distinct=True),
+                comment_count=Count("comments", distinct=True),
+                reribbit_count_annotated=Count("replies", distinct=True)
+            )
             .order_by("-created_at")
         )
 
@@ -246,7 +264,12 @@ class RepostApiView(generics.CreateAPIView):
         reribbit_of=original_post,
         parent=original_post
         )
-        self.instance = new_post  
+        
+        original_post.reribbit_count = models.F('reribbit_count') + 1
+        original_post.save(update_fields=['reribbit_count'])
+        original_post.refresh_from_db()
+        
+        self.instance = new_post
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)

@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import F
 from django.conf import settings
 from django.utils import timezone
 from cloudinary.models import CloudinaryField
@@ -13,9 +14,9 @@ class Ribbit(models.Model):
     media_type = models.CharField(max_length=20, null=True, blank=True)  
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
 
-    parent = models.ForeignKey('self', null=True, blank=True, related_name='replies', on_delete=models.SET_NULL)
+    parent = models.ForeignKey('self', null=True, blank=True, related_name='replies', on_delete=models.SET_NULL, db_index=True)
     is_reribbit = models.BooleanField(default=False)
-    reribbit_of = models.ForeignKey('self', null=True, blank=True, related_name='reribbit', on_delete=models.SET_NULL)
+    reribbit_of = models.ForeignKey('self', null=True, blank=True, related_name='reribbit', on_delete=models.SET_NULL, db_index=True)
 
     reply_count = models.PositiveIntegerField(default=0)
     reribbit_count = models.PositiveIntegerField(default=0)
@@ -26,15 +27,16 @@ class Ribbit(models.Model):
     def reribbit(self, user, text):
         repost = Ribbit.objects.create(
             author = user,
-            repost_text = text,
+            text = text,
             parent = self,
             is_reribbit = True,
             reribbit_of = self.reribbit_of or self
         )
 
-        orignal_post = self.reribbit_of or self
-        orignal_post.reribbit_count += 1
-        orignal_post.save(update_fields=["reribbit_count"])
+        original_post = self.reribbit_of or self
+        original_post.reribbit_count = F('reribbit_count') + 1
+        original_post.save(update_fields=["reribbit_count"])
+        original_post.refresh_from_db()
         return repost
 
 class Like(models.Model):
@@ -129,6 +131,7 @@ class EmailPreferences(models.Model):
     email_on_follow = models.BooleanField(default=True)
     email_on_mention = models.BooleanField(default=True)
     email_on_reply = models.BooleanField(default=True)
+    email_on_new_post_from_following = models.BooleanField(default=True)
     
     # Digest emails
     daily_digest = models.BooleanField(default=True)

@@ -62,7 +62,7 @@ def queue_notification_email(recipient, notification_type, context):
         subject=subject,
         body_html=html_body,
         body_text=text_body,
-        priority=3,  # Medium priority for instant notifications
+        priority=3, 
         scheduled_for=timezone.now()
     )
     
@@ -182,7 +182,8 @@ def generate_notification_email(notification_type, context):
         get_comment_email,
         get_follow_email,
         get_mention_email,
-        get_reply_email
+        get_reply_email,
+        get_new_post_from_following_email
     )
     
     templates = {
@@ -191,6 +192,7 @@ def generate_notification_email(notification_type, context):
         'follow': get_follow_email,
         'mention': get_mention_email,
         'reply': get_reply_email,
+        'new_post_from_following': get_new_post_from_following_email,
     }
     
     template_func = templates.get(notification_type)
@@ -219,3 +221,100 @@ def cleanup_old_emails(days=30):
         sent_at__lt=cutoff_date
     ).delete()[0]
     return deleted_count
+
+
+def queue_new_post_notification(post, followers):
+    """
+    Queue email notifications to followers when someone they follow creates a new post
+    
+    Args:
+        post: Ribbit object (the new post)
+        followers: QuerySet or list of User objects who follow the post author
+    """
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
+    
+    queued_count = 0
+    
+    for follower in followers:
+        # Check if user wants these emails
+        prefs = get_user_email_prefs(follower)
+        if not prefs.email_enabled or not prefs.email_on_new_post_from_following:
+            continue
+            
+        if not follower.email:
+            continue
+        
+        # Prepare context for email template
+        context = {
+            'author_name': post.author.first_name or post.author.username,
+            'author_username': post.author.username,
+            'post_text': post.text,
+            'post_url': f'https://croak-green-shine.vercel.app/post/{post.id}',
+            'has_media': bool(post.media),
+            'recipient_name': follower.first_name or follower.username,
+        }
+        
+        # Generate email content
+        subject, html_body, text_body = generate_notification_email('new_post_from_following', context)
+        
+        # Queue the email
+        EmailQueue.objects.create(
+            recipient=follower,
+            email_type='instant',
+            subject=subject,
+            body_html=html_body,
+            body_text=text_body,
+            priority=4,  # Medium-low priority
+            scheduled_for=timezone.now()
+        )
+        
+        queued_count += 1
+    
+    return queued_count
+
+
+def queue_daily_reminder(recipient):
+    """
+    Queue a daily reminder email to encourage user to check the site
+    
+    Args:
+        recipient: User object
+    """
+    prefs = get_user_email_prefs(recipient)
+    
+    # Check if user wants daily digest (we use same preference for reminders)
+    if not prefs.daily_digest or not prefs.email_enabled:
+        return None
+    
+    if not recipient.email:
+        return None
+    
+    # Generate reminder email
+    from .email_templates import get_daily_reminder_email
+    subject, html_body, text_body = get_daily_reminder_email(recipient)
+    
+    # Schedule for user's preferred digest time
+    scheduled_time = timezone.now().replace(
+        hour=prefs.digest_time.hour,
+        minute=prefs.digest_time.minute,
+        second=0,
+        microsecond=0
+    )
+    
+    # If the time has passed today, schedule for tomorrow
+    if scheduled_time <= timezone.now():
+        scheduled_time += timedelta(days=1)
+    
+    email = EmailQueue.objects.create(
+        recipient=recipient,
+        email_type='digest',
+        subject=subject,
+        body_html=html_body,
+        body_text=text_body,
+        priority=5,  # Low priority
+        scheduled_for=scheduled_time
+    )
+    
+    return email
+

@@ -1,5 +1,6 @@
 import random
 import requests
+import threading
 from datetime import timedelta
 from django.utils import timezone
 from django.core.cache import cache
@@ -24,12 +25,20 @@ def generate_otp():
 
 
 def send_otp_email(email, otp):
-    """Send OTP to the email using external mail service."""
-    res = requests.post(
-        f"{os.getenv('NOTIFICATIONS_SERVICE_URL', 'https://croak-notifications.vercel.app')}/send-otp-email",
-        json={"to": email, "otp": otp},
-    )
-    return res.status_code == 200
+    """Send OTP to the email using external mail service in the background."""
+    def _send():
+        try:
+            requests.post(
+                f"{os.getenv('NOTIFICATIONS_SERVICE_URL', 'https://croak-notifications.vercel.app')}/send-otp-email",
+                json={"to": email, "otp": otp},
+                timeout=10,
+            )
+        except Exception as e:
+            print(f"Error sending OTP email: {e}")
+
+    thread = threading.Thread(target=_send)
+    thread.start()
+    return True  # Always return True as it's now async
 
 
 # ---------------- REGISTER ----------------
@@ -57,7 +66,7 @@ class RegisterView(APIView):
             defaults={
                 "otp": otp_code,
                 "expires_at": expires_at,
-                "is_verfied": False,
+                "is_verified": False,
             },
         )
 
@@ -111,7 +120,7 @@ class VerifyOtpView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        otp_entry.is_verfied = True
+        otp_entry.is_verified = True
         otp_entry.save()
 
         # get cached user data
@@ -125,13 +134,16 @@ class VerifyOtpView(APIView):
         # create the user now that OTP is valid
         serializer = RegisterSerializer(data=user_data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        user = serializer.save()
 
         # clear the cached data
         cache.delete(email)
 
         return Response(
-            {"message": "Email verified and account created successfully!"},
+            {
+                "message": "Email verified and account created successfully!",
+                "user": UserSerializer(user).data
+            },
             status=status.HTTP_201_CREATED,
         )
 
@@ -144,10 +156,10 @@ class LoginView(APIView):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        username = serializer.validated_data["username"]
+        email = serializer.validated_data["email"]
         password = serializer.validated_data["password"]
 
-        user = authenticate(username=username, password=password)
+        user = authenticate(email=email, password=password)
         if not user:
             return Response(
                 {"error": "Invalid credentials"},

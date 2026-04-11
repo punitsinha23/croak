@@ -13,7 +13,8 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ('username', 'first_name', 'email', 'password', 'password2', 'location', 'bio', 'profile_pic',)
+        fields = ('first_name', 'email', 'password', 'password2', 'location', 'bio', 'profile_pic', 'username')
+        extra_kwargs = {'username': {'required': False}} # Make username optional in signup
 
     def validate(self, attrs):
         if attrs['password'] != attrs['password2']:
@@ -21,17 +22,28 @@ class RegisterSerializer(serializers.ModelSerializer):
         return attrs
     
     def create(self, validated_data):
-        validated_data.pop('password2')
+        validated_data.pop('password2', None)
         password = validated_data.pop('password')
+        email = validated_data.get('email', '')
+        
+        # Auto-generate username if not provided
+        if not validated_data.get('username'):
+            base_username = email.split('@')[0]
+            username = base_username
+            counter = 1
+            while User.objects.filter(username=username).exists():
+                username = f"{base_username}{counter}"
+                counter += 1
+            validated_data['username'] = username
 
         user = User.objects.create_user(
-        username=validated_data['username'],
-        first_name=validated_data['first_name'],
-        email=validated_data.get('email', ''),
-        password=password,
-        bio=validated_data.get('bio', ''),
-        profile_pic=validated_data.get('profile_pic', None),
-        location=validated_data.get('location') 
+            username=validated_data['username'],
+            first_name=validated_data['first_name'],
+            email=email,
+            password=password,
+            bio=validated_data.get('bio', ''),
+            profile_pic=validated_data.get('profile_pic', None),
+            location=validated_data.get('location') 
         )
 
         return user
@@ -39,7 +51,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     
 class LoginSerializer(serializers.Serializer):
-    username = serializers.CharField(required=True) 
+    email = serializers.EmailField(required=True) 
     password = serializers.CharField(required=True, write_only=True)   
 
 
@@ -51,7 +63,7 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             "id", "username", "first_name", "email", 
-            "bio", "profile_pic", "location", "join_date", 
+            "bio", "profile_pic", "location", "created_at", 
             "followers_count", "following_count", "banner"
         ]
 
