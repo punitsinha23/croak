@@ -103,3 +103,7 @@ class ResetPasswordSerializer(serializers.Serializer):
         if attrs["password"] != attrs["password2"]:
             raise serializers.ValidationError({"password": "Password fields didn't match."})
         return attrs
+
+
+class GoogleLoginSerializer(serializers.Serializer):
+    credential = serializers.CharField(required=True)

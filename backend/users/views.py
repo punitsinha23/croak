@@ -1,6 +1,8 @@
 import random
 import requests
 import threading
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 from datetime import timedelta
 from django.utils import timezone
 from django.core.cache import cache
@@ -18,6 +20,7 @@ from .serializers import (
     UserSerializer,
     RequestPasswordResetSerializer,
     ResetPasswordSerializer,
+    GoogleLoginSerializer,
 )
 from .models import OTP
 
@@ -128,6 +131,61 @@ class ResetPasswordView(APIView):
                 {"error": "User no longer exists."},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+
+class GoogleLoginView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = GoogleLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        token = serializer.validated_data["credential"]
+        client_id = os.getenv("GOOGLE_CLIENT_ID")
+
+        if not client_id:
+            return Response({"error": "Google Client ID not configured"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        try:
+            # Verify the token
+            idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), client_id)
+
+            # ID token is valid. Get the user's Google info.
+            email = idinfo["email"]
+            first_name = idinfo.get("given_name", "")
+            # last_name = idinfo.get("family_name", "")
+            # picture = idinfo.get("picture", "")
+
+            # Check if user exists
+            user, created = User.objects.get_or_create(email=email, defaults={
+                "first_name": first_name,
+                "is_active": True,
+            })
+
+            if created:
+                # Set a random username if not provided
+                base_username = email.split("@")[0]
+                username = base_username
+                counter = 1
+                while User.objects.filter(username=username).exists():
+                    username = f"{base_username}{counter}"
+                    counter += 1
+                user.username = username
+                user.set_unusable_password()
+                user.save()
+
+            # Generate JWT tokens
+            refresh = RefreshToken.for_user(user)
+            return Response({
+                "refresh": str(refresh),
+                "access": str(refresh.access_token),
+                "user": UserSerializer(user).data
+            }, status=status.HTTP_200_OK)
+
+        except ValueError:
+            return Response({"error": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 # ---------------- REGISTER ----------------
 class RegisterView(APIView):
     permission_classes = [permissions.AllowAny]

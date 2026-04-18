@@ -9,6 +9,7 @@ from .views import (
     FollowUnfollowView,
     RequestPasswordResetView,
     ResetPasswordView,
+    GoogleLoginView,
 )
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
@@ -29,4 +30,5 @@ urlpatterns = [
     path("<str:username>/follow/", FollowUnfollowView.as_view(), name="follow"),
     path("password-reset-request/", RequestPasswordResetView.as_view(), name="password_reset_request"),
     path("password-reset-confirm/", ResetPasswordView.as_view(), name="password_reset_confirm"),
+    path("google/", GoogleLoginView.as_view(), name="google_login"),
 ]
