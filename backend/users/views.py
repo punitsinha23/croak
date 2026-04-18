@@ -12,7 +12,13 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework_simplejwt.tokens import RefreshToken
 import os
 
-from .serializers import RegisterSerializer, LoginSerializer, UserSerializer
+from .serializers import (
+    RegisterSerializer,
+    LoginSerializer,
+    UserSerializer,
+    RequestPasswordResetSerializer,
+    ResetPasswordSerializer,
+)
 from .models import OTP
 
 User = get_user_model()
@@ -40,7 +46,88 @@ def send_otp_email(email, otp):
     thread.start()
     return True  # Always return True as it's now async
 
+class RequestPasswordResetView(APIView):
+    permission_classes = [permissions.AllowAny]
 
+    def post(self, request):
+        serializer = RequestPasswordResetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data["email"]
+
+        # Check if user exists
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            # Return success even if email doesn't exist for security
+            return Response(
+                {"message": "If an account exists with this email, an OTP has been sent."},
+                status=status.HTTP_200_OK,
+            )
+
+        otp_code = generate_otp()
+        expires_at = timezone.now() + timedelta(minutes=5)
+
+        OTP.objects.update_or_create(
+            email=email,
+            defaults={
+                "otp": otp_code,
+                "expires_at": expires_at,
+                "is_verified": False,
+            },
+        )
+
+        send_otp_email(email, otp_code)
+
+        return Response(
+            {"message": "If an account exists with this email, an OTP has been sent."},
+            status=status.HTTP_200_OK,
+        )
+
+
+class ResetPasswordView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = ResetPasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        email = serializer.validated_data["email"]
+        otp = serializer.validated_data["otp"]
+        password = serializer.validated_data["password"]
+
+        try:
+            otp_entry = OTP.objects.get(email=email, otp=otp, is_verified=False)
+        except OTP.DoesNotExist:
+            return Response(
+                {"error": "Invalid OTP or email."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if otp_entry.expires_at < timezone.now():
+            return Response(
+                {"error": "OTP has expired."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Update password
+        try:
+            user = User.objects.get(email=email)
+            user.set_password(password)
+            user.save()
+
+            # Mark OTP as verified (effectively used)
+            otp_entry.is_verified = True
+            otp_entry.save()
+
+            return Response(
+                {"message": "Password has been reset successfully."},
+                status=status.HTTP_200_OK,
+            )
+        except User.DoesNotExist:
+            return Response(
+                {"error": "User no longer exists."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 # ---------------- REGISTER ----------------
 class RegisterView(APIView):
     permission_classes = [permissions.AllowAny]
@@ -170,6 +257,7 @@ class LoginView(APIView):
         return Response(
             {"refresh": str(refresh), "access": str(refresh.access_token)}
         )
+
 
 
 # ---------------- PROFILE ----------------

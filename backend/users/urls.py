@@ -7,6 +7,8 @@ from .views import (
     listApiView,
     EditProfileView,
     FollowUnfollowView,
+    RequestPasswordResetView,
+    ResetPasswordView,
 )
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
@@ -25,4 +27,6 @@ urlpatterns = [
     path("token/verify/", TokenVerifyView.as_view(), name="token_verify"),
     path("update/", EditProfileView.as_view(), name="edit_profile"),
     path("<str:username>/follow/", FollowUnfollowView.as_view(), name="follow"),
+    path("password-reset-request/", RequestPasswordResetView.as_view(), name="password_reset_request"),
+    path("password-reset-confirm/", ResetPasswordView.as_view(), name="password_reset_confirm"),
 ]
