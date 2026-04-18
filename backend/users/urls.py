@@ -30,5 +30,5 @@ urlpatterns = [
     path("<str:username>/follow/", FollowUnfollowView.as_view(), name="follow"),
     path("password-reset-request/", RequestPasswordResetView.as_view(), name="password_reset_request"),
     path("password-reset-confirm/", ResetPasswordView.as_view(), name="password_reset_confirm"),
-    re_path(r"^google/?$", GoogleLoginView.as_view(), name="google_login"),
+    path("google/", GoogleLoginView.as_view(), name="google_login"),
 ]
