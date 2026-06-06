@@ -76,21 +76,31 @@ class PostSerializer(serializers.ModelSerializer):
         if not file:
             return file
 
+        # Determine resource type based on file content type
+        content_type = getattr(file, "content_type", "")
+        is_image = content_type.startswith("image/")
+        is_video = content_type.startswith("video/")
+        
+        # Default to auto if content_type is not set
+        resource_type = "image" if is_image else ("video" if is_video else "auto")
+
         upload = cloudinary.uploader.upload(
             file,
-            resource_type="video",
+            resource_type=resource_type,
             folder="ribbit_media_temp",
         )
 
         print("UPLOAD RESPONSE:", upload)
 
-        duration = upload.get("duration", 0)
+        # Only validate duration for videos
+        if is_video:
+            duration = upload.get("duration", 0)
+            if duration > 30:
+                cloudinary.uploader.destroy(upload["public_id"], resource_type="video")
+                raise serializers.ValidationError("Video must be 30 seconds or shorter.")
 
-        if duration > 30:
-            cloudinary.uploader.destroy(upload["public_id"], resource_type="video")
-            raise serializers.ValidationError("Video must be 15 seconds or shorter.")
-
-        cloudinary.uploader.destroy(upload["public_id"], resource_type="video")
+        # Clean up the temp upload
+        cloudinary.uploader.destroy(upload["public_id"], resource_type=resource_type)
 
         return file
 
