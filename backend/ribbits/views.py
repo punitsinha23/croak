@@ -94,8 +94,25 @@ class LikeApiView(APIView):
         ribbit = get_object_or_404(Ribbit, pk=pk)
         like, created = Like.objects.get_or_create(ribbit=ribbit, user=request.user)
 
-        if not created: 
+        if created:
+            # Create notification for the post author
+            if ribbit.author != request.user:
+                Notification.objects.create(
+                    sender=request.user,
+                    receiver=ribbit.author,
+                    notif_type='like',
+                    post=ribbit,
+                    message='liked your post'
+                )
+        else: 
             like.delete()
+            # Delete corresponding notification
+            Notification.objects.filter(
+                sender=request.user,
+                receiver=ribbit.author,
+                notif_type='like',
+                post=ribbit
+            ).delete()
 
         serializer = PostSerializer(ribbit, context={"request": request})
 
@@ -200,7 +217,18 @@ class CommentApiView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         ribbit_id = self.kwargs.get('pk')
-        serializer.save(author=self.request.user, ribbit_id=ribbit_id)
+        ribbit = Ribbit.objects.get(pk=ribbit_id)
+        comment = serializer.save(author=self.request.user, ribbit_id=ribbit_id)
+        
+        # Create notification for the post author
+        if ribbit.author != self.request.user:
+            Notification.objects.create(
+                sender=self.request.user,
+                receiver=ribbit.author,
+                notif_type='comment',
+                post=ribbit,
+                message='commented on your post'
+            )
 
 class CommentDeleteView(generics.DestroyAPIView):
     queryset = Comment.objects.all()
@@ -218,10 +246,21 @@ class replyApiView(generics.ListCreateAPIView):
     def get_queryset(self):
         return super().get_queryset().filter(comment_id=self.kwargs['comment_id']).order_by('-created_at')
     def perform_create(self, serializer):
-        serializer.save(
+        comment = Comment.objects.get(pk=self.kwargs["comment_id"])
+        reply = serializer.save(
             author=self.request.user,
-            comment=Comment.objects.get(pk=self.kwargs["comment_id"])
+            comment=comment
         )
+        
+        # Create notification for the comment author
+        if comment.author != self.request.user:
+            Notification.objects.create(
+                sender=self.request.user,
+                receiver=comment.author,
+                notif_type='reply',
+                post=comment.ribbit,
+                message='replied to your comment'
+            )
 
         
        
