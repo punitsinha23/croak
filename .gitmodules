@@ -1,0 +1,7 @@
+[submodule "croak_notifications/croak_notifications"]
+	path = croak_notifications/croak_notifications
+	url = https://github.com/punitsinha23/croak_notifications.git
+
+[submodule "frontend/croak-green-shine"]
+	path = frontend/croak-green-shine
+	url = https://github.com/punitsinha23/croak-green-shine.git
