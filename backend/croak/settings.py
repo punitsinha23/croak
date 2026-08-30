@@ -99,11 +99,12 @@ if TESTING:
         }
     }
 else:
+    _database_url = os.getenv("DATABASE_URL", "")
     DATABASES = {
         "default": dj_database_url.config(
-            default=os.getenv("DATABASE_URL"),
-            conn_max_age=600,   
-            ssl_require=True    
+            default=_database_url,
+            conn_max_age=600,
+            ssl_require=_database_url.startswith("postgres"),
         )
     }
 
@@ -184,6 +185,7 @@ SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "AUTH_HEADER_TYPES": ("Bearer",),
+    "UPDATE_LAST_LOGIN": True,
 }
 
 CORS_ALLOW_ALL_ORIGINS = False 

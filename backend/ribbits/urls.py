@@ -5,7 +5,12 @@ from .views import (PostApiView, RetrieveMyRibbitView,
                     CommentApiView, UserDetailApiView, NotificationListView, RepostApiView, CommentDeleteView, replyApiView, announce_update
                     )
 from .email_serializers import EmailPreferencesViewSet
-from .cron_views import process_email_queue_endpoint, send_daily_digests_endpoint, email_queue_stats
+from .cron_views import (
+    process_email_queue_endpoint,
+    send_daily_digests_endpoint,
+    send_weekly_nudges_endpoint,
+    email_queue_stats,
+)
 
 urlpatterns = [
     path("post/", PostApiView.as_view(), name="post"),
@@ -28,6 +33,7 @@ urlpatterns = [
     # Cron endpoints
     path('cron/process-emails/', process_email_queue_endpoint, name='cron-process-emails'),
     path('cron/daily-digest/', send_daily_digests_endpoint, name='cron-daily-digest'),
+    path('cron/weekly-nudges/', send_weekly_nudges_endpoint, name='cron-weekly-nudges'),
     path('cron/stats/', email_queue_stats, name='cron-stats'),
     ]
 

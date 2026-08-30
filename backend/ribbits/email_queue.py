@@ -315,6 +315,44 @@ def queue_daily_reminder(recipient):
         priority=5,  # Low priority
         scheduled_for=scheduled_time
     )
-    
+
+    return email
+
+
+def queue_weekly_nudge(recipient, needs_post_reminder=False, suggested_users=None):
+    """
+    Queue a weekly growth email: a nudge to post if the user has gone quiet,
+    and/or a few suggested people to follow.
+
+    Args:
+        recipient: User object
+        needs_post_reminder: bool, True if the user hasn't posted in a while
+        suggested_users: list of dicts [{ 'username', 'first_name', 'followers_count' }, ...]
+    """
+    prefs = get_user_email_prefs(recipient)
+
+    if not prefs.weekly_summary or not prefs.email_enabled:
+        return None
+
+    if not recipient.email:
+        return None
+
+    # Nothing to say this week
+    if not needs_post_reminder and not suggested_users:
+        return None
+
+    from .email_templates import get_weekly_nudge_email
+    subject, html_body, text_body = get_weekly_nudge_email(recipient, needs_post_reminder, suggested_users)
+
+    email = EmailQueue.objects.create(
+        recipient=recipient,
+        email_type='weekly',
+        subject=subject,
+        body_html=html_body,
+        body_text=text_body,
+        priority=6,  # Lowest priority
+        scheduled_for=timezone.now()
+    )
+
     return email
 

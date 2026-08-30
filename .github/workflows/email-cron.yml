@@ -4,10 +4,13 @@ on:
   schedule:
     # Process email queue every 5 minutes
     - cron: '*/5 * * * *'
-    
-    # Send daily digests at 9 AM UTC
+
+    # Send daily digests (or "you're missing this" reminders) at 9 AM UTC
     - cron: '0 9 * * *'
-  
+
+    # Send weekly growth nudges (post reminders, suggested follows) Monday 10 AM UTC
+    - cron: '0 10 * * 1'
+
   # Allow manual trigger
   workflow_dispatch:
 
@@ -32,10 +35,22 @@ jobs:
     runs-on: ubuntu-latest
     # Run once daily at 9 AM
     if: github.event.schedule == '0 9 * * *' || github.event_name == 'workflow_dispatch'
-    
+
     steps:
       - name: Generate Daily Digests
         run: |
           curl -X POST "${{ secrets.BACKEND_URL }}/api/ribbit/cron/daily-digest/" \
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" \
+            -H "Content-Type: application/json"
+
+  send-weekly-nudges:
+    runs-on: ubuntu-latest
+    # Run once a week, Monday at 10 AM
+    if: github.event.schedule == '0 10 * * 1' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Generate Weekly Nudges
+        run: |
+          curl -X POST "${{ secrets.BACKEND_URL }}/api/ribbit/cron/weekly-nudges/" \
             -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" \
             -H "Content-Type: application/json"

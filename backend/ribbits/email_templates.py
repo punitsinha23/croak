@@ -30,12 +30,12 @@ def get_base_template(content, recipient_name="there"):
         .header {{
             text-align: center;
             padding-bottom: 20px;
-            border-bottom: 2px solid #10b981;
+            border-bottom: 2px solid #1d9bf0;
         }}
         .logo {{
             font-size: 32px;
             font-weight: bold;
-            color: #10b981;
+            color: #1d9bf0;
         }}
         .content {{
             padding: 20px 0;
@@ -43,7 +43,7 @@ def get_base_template(content, recipient_name="there"):
         .button {{
             display: inline-block;
             padding: 12px 24px;
-            background-color: #10b981;
+            background-color: #1d9bf0;
             color: #ffffff !important;
             text-decoration: none;
             border-radius: 6px;
@@ -69,7 +69,7 @@ def get_base_template(content, recipient_name="there"):
         </div>
         <div class="footer">
             <p>You're receiving this because you have notifications enabled on Croak.</p>
-            <p><a href="https://croak.com/settings/notifications" style="color: #10b981;">Manage your email preferences</a></p>
+            <p><a href="https://croak-green-shine.vercel.app/email-settings" style="color: #1d9bf0;">Manage your email preferences</a></p>
         </div>
     </div>
 </body>
@@ -555,6 +555,94 @@ Keep croaking, keep connecting! 💚
 ---
 Croak - Free Voices. Real Connections.
 """
-    
+
+    return subject, html_body, text_body
+
+
+def get_weekly_nudge_email(recipient, needs_post_reminder=False, suggested_users=None):
+    """
+    Weekly growth email combining whichever sections apply for this user:
+    - A nudge to post if they haven't shared anything in a while
+    - Suggested people to follow
+
+    Args:
+        recipient: User object
+        needs_post_reminder: bool, True if the user hasn't posted recently
+        suggested_users: list of dicts [{ 'username', 'first_name', 'followers_count' }, ...]
+    """
+    suggested_users = suggested_users or []
+    name = recipient.first_name or recipient.username
+
+    post_reminder_html = ""
+    if needs_post_reminder:
+        post_reminder_html = """
+        <div style="background-color: #eff6ff; padding: 20px; border-radius: 8px; border-left: 4px solid #1d9bf0; margin: 20px 0;">
+            <h3 style="margin-top: 0;">📸 It's been quiet on your end</h3>
+            <p style="margin: 0;">
+                You haven't posted on Croak in a while. Your followers would love to hear from you —
+                share a thought, a photo, or whatever's on your mind.
+            </p>
+            <a href="https://croak-green-shine.vercel.app/index" class="button">Post Something</a>
+        </div>
+        """
+
+    suggestions_html = ""
+    if suggested_users:
+        cards = ""
+        for u in suggested_users:
+            display_name = u.get("first_name") or u["username"]
+            cards += f"""
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background-color: #f9fafb; border-radius: 8px; margin: 8px 0;">
+                <div>
+                    <p style="margin: 0; font-weight: 600;">{display_name}</p>
+                    <p style="margin: 2px 0 0; color: #6b7280; font-size: 14px;">@{u['username']} · {u.get('followers_count', 0)} followers</p>
+                </div>
+                <a href="https://croak-green-shine.vercel.app/user/{u['username']}" style="color: #1d9bf0; text-decoration: none; font-weight: 600; font-size: 14px;">View Profile</a>
+            </div>
+            """
+        suggestions_html = f"""
+        <div style="margin: 20px 0;">
+            <h3>👋 People you might want to follow</h3>
+            {cards}
+        </div>
+        """
+
+    subject = "🐸 Your weekly Croak check-in"
+    if needs_post_reminder and suggested_users:
+        subject = "🐸 We miss your posts + some new people to follow"
+    elif needs_post_reminder:
+        subject = "🐸 Your followers miss hearing from you"
+    elif suggested_users:
+        subject = "🐸 A few people you might want to follow on Croak"
+
+    html_content = f"""
+        <h2>Here's your weekly Croak check-in</h2>
+        {post_reminder_html}
+        {suggestions_html}
+        <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
+            Keep croaking, keep connecting! 💚
+        </p>
+    """
+
+    html_body = get_base_template(html_content, name)
+
+    text_lines = [f"Hey {name},", "", "Here's your weekly Croak check-in.", ""]
+    if needs_post_reminder:
+        text_lines += [
+            "It's been quiet on your end - you haven't posted in a while.",
+            "Share something: https://croak-green-shine.vercel.app/index",
+            "",
+        ]
+    if suggested_users:
+        text_lines.append("People you might want to follow:")
+        for u in suggested_users:
+            text_lines.append(
+                f"- @{u['username']} ({u.get('followers_count', 0)} followers): "
+                f"https://croak-green-shine.vercel.app/user/{u['username']}"
+            )
+        text_lines.append("")
+    text_lines += ["Keep croaking, keep connecting! 💚", "", "---", "Croak - Free Voices. Real Connections."]
+    text_body = "\n".join(text_lines)
+
     return subject, html_body, text_body
 

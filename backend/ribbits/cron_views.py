@@ -13,7 +13,7 @@ from django.utils import timezone
 from datetime import timedelta
 from django.db.models import Count
 from ribbits.models import Ribbit, Like, Comment
-from ribbits.email_queue import queue_daily_digest
+from ribbits.email_queue import queue_daily_digest, queue_daily_reminder, queue_weekly_nudge
 import os
 
 User = get_user_model()
@@ -104,8 +104,8 @@ def send_daily_digests_endpoint(request):
         
         total_users = users.count()
         queued_count = 0
-        skipped_count = 0
-        
+        reminded_count = 0
+
         # Yesterday's date range
         yesterday = timezone.now() - timedelta(days=1)
         yesterday_start = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -156,16 +156,96 @@ def send_daily_digests_endpoint(request):
                     'trending_posts': trending_posts_data,
                 }
                 
-                # Only send if there's activity
+                # If something happened, send the activity digest. Otherwise, nudge them
+                # back with one of the "you're missing this" reminder emails instead of
+                # just staying silent.
                 if (new_followers > 0 or total_likes > 0 or total_comments > 0 or len(trending_posts_data) > 0):
                     queue_daily_digest(user, digest_data)
                     queued_count += 1
                 else:
-                    skipped_count += 1
-                    
+                    queue_daily_reminder(user)
+                    reminded_count += 1
+
             except Exception as e:
                 print(f"Error for user {user.username}: {str(e)}")
-        
+
+        return Response({
+            'status': 'success',
+            'total_users': total_users,
+            'queued': queued_count,
+            'reminded': reminded_count,
+            'timestamp': timezone.now().isoformat()
+        })
+
+    except Exception as e:
+        return Response({
+            'status': 'error',
+            'message': str(e)
+        }, status=500)
+
+
+@api_view(['POST', 'GET'])
+@permission_classes([AllowAny])
+def send_weekly_nudges_endpoint(request):
+    """
+    Generate and queue weekly growth/engagement emails:
+    - A nudge to post for users who haven't shared anything in 7+ days
+    - Suggested people to follow, for users with room to grow their follow list
+
+    Called by cron job once per week (e.g. Monday morning)
+
+    Usage:
+    POST /api/ribbit/cron/weekly-nudges?secret=YOUR_SECRET
+    """
+    if not verify_cron_secret(request):
+        return Response({'error': 'Unauthorized'}, status=403)
+
+    try:
+        users = User.objects.filter(
+            email_preferences__weekly_summary=True,
+            email_preferences__email_enabled=True
+        ).exclude(email='')
+
+        total_users = users.count()
+        queued_count = 0
+        skipped_count = 0
+
+        post_inactivity_cutoff = timezone.now() - timedelta(days=7)
+
+        # Popular users (most followers), reused as the suggestion pool for everyone below
+        popular_users = list(
+            User.objects.annotate(follower_count=Count('followers'))
+            .order_by('-follower_count')[:50]
+        )
+
+        for user in users:
+            try:
+                has_recent_post = Ribbit.objects.filter(
+                    author=user,
+                    created_at__gte=post_inactivity_cutoff
+                ).exists()
+                needs_post_reminder = not has_recent_post
+
+                already_following_ids = set(user.following.values_list('id', flat=True))
+                suggestions = [
+                    {
+                        'username': candidate.username,
+                        'first_name': candidate.first_name,
+                        'followers_count': candidate.follower_count,
+                    }
+                    for candidate in popular_users
+                    if candidate.id != user.id and candidate.id not in already_following_ids
+                ][:3]
+
+                nudge = queue_weekly_nudge(user, needs_post_reminder, suggestions)
+                if nudge:
+                    queued_count += 1
+                else:
+                    skipped_count += 1
+
+            except Exception as e:
+                print(f"Error for user {user.username}: {str(e)}")
+
         return Response({
             'status': 'success',
             'total_users': total_users,
@@ -173,7 +253,7 @@ def send_daily_digests_endpoint(request):
             'skipped': skipped_count,
             'timestamp': timezone.now().isoformat()
         })
-        
+
     except Exception as e:
         return Response({
             'status': 'error',

@@ -7,6 +7,7 @@ from datetime import timedelta
 from django.utils import timezone
 from django.core.cache import cache
 from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth.models import update_last_login
 from rest_framework import generics, status, permissions
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -174,6 +175,8 @@ class GoogleLoginView(APIView):
                 user.set_unusable_password()
                 user.save()
 
+            update_last_login(None, user)
+
             # Generate JWT tokens
             refresh = RefreshToken.for_user(user)
             return Response({
@@ -310,6 +313,8 @@ class LoginView(APIView):
                 {"error": "Invalid credentials"},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
+
+        update_last_login(None, user)
 
         refresh = RefreshToken.for_user(user)
         return Response(
