@@ -264,3 +264,149 @@ class CommunityModelTests(TestCase):
         )
         self.assertIn("comuser", str(membership))
         self.assertIn("admin", str(membership))
+
+
+class MessageReadTests(TestCase):
+
+    def setUp(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        self.creator = create_user()
+        self.outsider = create_user(username="outsider2", email="outsider2@test.com")
+        self.community = create_community(self.creator)
+        now = timezone.now()
+        self.old = Message.objects.create(
+            community=self.community, sender=self.creator, content="old", created_at=now - timedelta(minutes=5)
+        )
+        self.new = Message.objects.create(community=self.community, sender=self.creator, content="new", created_at=now)
+        self.cutoff = (now - timedelta(minutes=1)).isoformat()
+        self.msg_url = "/api/communities/messages/"
+
+    def results(self, response):
+        return response.data.get("results", response.data)
+
+    def test_outsider_cannot_read_messages(self):
+        response = get_auth_client(self.outsider).get(self.msg_url, {"community_slug": self.community.slug})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_community_slug_is_required(self):
+        response = get_auth_client(self.creator).get(self.msg_url)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_messages_newest_first(self):
+        response = get_auth_client(self.creator).get(self.msg_url, {"community_slug": self.community.slug})
+        self.assertEqual([m["content"] for m in self.results(response)], ["new", "old"])
+
+    def test_since_returns_only_newer_messages(self):
+        response = get_auth_client(self.creator).get(
+            self.msg_url, {"community_slug": self.community.slug, "since": self.cutoff}
+        )
+        self.assertEqual([m["content"] for m in self.results(response)], ["new"])
+
+    def test_messages_from_other_communities_are_excluded(self):
+        other = create_community(self.creator, name="Other Pond")
+        Message.objects.create(community=other, sender=self.creator, content="elsewhere")
+        response = get_auth_client(self.creator).get(self.msg_url, {"community_slug": self.community.slug})
+        self.assertNotIn("elsewhere", [m["content"] for m in self.results(response)])
+
+
+class MessageDeleteTests(TestCase):
+
+    def setUp(self):
+        self.creator = create_user()
+        self.author = create_user(username="author", email="author@test.com")
+        self.bystander = create_user(username="bystander", email="bystander@test.com")
+        self.community = create_community(self.creator)
+        for user in (self.author, self.bystander):
+            Membership.objects.create(user=user, community=self.community, role="member")
+        self.message = Message.objects.create(community=self.community, sender=self.author, content="oops")
+        self.url = f"/api/communities/messages/{self.message.pk}/"
+
+    def test_sender_can_delete_own_message(self):
+        response = get_auth_client(self.author).delete(self.url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Message.objects.exists())
+
+    def test_admin_can_delete_any_message(self):
+        response = get_auth_client(self.creator).delete(self.url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Message.objects.exists())
+
+    def test_other_member_cannot_delete_message(self):
+        response = get_auth_client(self.bystander).delete(self.url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(Message.objects.exists())
+
+
+class RemoveMemberTests(TestCase):
+
+    def setUp(self):
+        self.creator = create_user()
+        self.member = create_user(username="member2", email="member2@test.com")
+        self.other = create_user(username="member3", email="member3@test.com")
+        self.community = create_community(self.creator)
+        for user in (self.member, self.other):
+            Membership.objects.create(user=user, community=self.community, role="member")
+        Community.objects.filter(pk=self.community.pk).update(member_count=3)
+        self.url = "/api/communities/membership/remove_member/"
+
+    def remove(self, as_user, target):
+        return get_auth_client(as_user).post(
+            self.url, {"community_slug": self.community.slug, "user_id": target.pk}, format="json"
+        )
+
+    def test_admin_can_remove_member(self):
+        response = self.remove(self.creator, self.member)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(Membership.objects.filter(user=self.member, community=self.community).exists())
+        self.community.refresh_from_db()
+        self.assertEqual(self.community.member_count, 2)
+
+    def test_regular_member_cannot_remove_others(self):
+        response = self.remove(self.member, self.other)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(Membership.objects.filter(user=self.other, community=self.community).exists())
+
+    def test_creator_cannot_be_removed(self):
+        Membership.objects.filter(user=self.member).update(role="admin")
+        response = self.remove(self.member, self.creator)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertTrue(Membership.objects.filter(user=self.creator, community=self.community).exists())
+
+    def test_members_endpoint_lists_everyone(self):
+        response = get_auth_client(self.member).get(f"/api/communities/{self.community.slug}/members/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(response.data), 3)
+
+
+class CommunityEditPermissionTests(TestCase):
+
+    def setUp(self):
+        self.creator = create_user()
+        self.member = create_user(username="member4", email="member4@test.com")
+        self.community = create_community(self.creator, description="Original")
+        Membership.objects.create(user=self.member, community=self.community, role="member")
+        self.url = f"/api/communities/{self.community.slug}/"
+
+    def test_non_admin_cannot_edit(self):
+        response = get_auth_client(self.member).patch(self.url, {"description": "Hijacked"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.community.refresh_from_db()
+        self.assertEqual(self.community.description, "Original")
+
+    def test_admin_can_edit(self):
+        response = get_auth_client(self.creator).patch(self.url, {"description": "Updated"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.community.refresh_from_db()
+        self.assertEqual(self.community.description, "Updated")
+
+    def test_non_creator_cannot_delete(self):
+        Membership.objects.filter(user=self.member).update(role="admin")
+        response = get_auth_client(self.member).delete(self.url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(Community.objects.filter(pk=self.community.pk).exists())
+
+    def test_creator_can_delete(self):
+        response = get_auth_client(self.creator).delete(self.url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Community.objects.filter(pk=self.community.pk).exists())

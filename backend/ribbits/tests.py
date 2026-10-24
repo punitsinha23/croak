@@ -8,7 +8,8 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 from rest_framework import status
 from django.contrib.auth import get_user_model
-from .models import Ribbit, Like, Comment, Notification
+from unittest.mock import patch
+from .models import Ribbit, Like, Comment, Notification, Reply, EmailQueue, EmailPreferences
 
 User = get_user_model()
 
@@ -213,6 +214,21 @@ class CommentTests(TestCase):
         self.assertIn(response.status_code, [status.HTTP_200_OK, status.HTTP_204_NO_CONTENT])
         self.assertEqual(Comment.objects.count(), 0)
 
+    def test_post_author_can_delete_comment_on_their_post(self):
+        comment = Comment.objects.create(ribbit=self.ribbit, author=self.commenter, text="Rude")
+        url = reverse("delete_comment", kwargs={"ribbit_id": self.ribbit.pk, "comment_id": comment.pk})
+        response = get_auth_client(self.author).delete(url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(Comment.objects.count(), 0)
+
+    def test_stranger_cannot_delete_comment(self):
+        stranger = create_user(username="stranger", email="stranger@test.com")
+        comment = Comment.objects.create(ribbit=self.ribbit, author=self.commenter, text="Keep me")
+        url = reverse("delete_comment", kwargs={"ribbit_id": self.ribbit.pk, "comment_id": comment.pk})
+        response = get_auth_client(stranger).delete(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(Comment.objects.count(), 1)
+
 
 # ---------------------------------------------------------------------------
 # Search Tests
@@ -325,3 +341,258 @@ class NotificationTests(TestCase):
             print("ERROR: Unauthenticated user got 200 on notifications:")
             print(response.data)
         self.assertIn(response.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
+
+
+class InteractionNotificationTests(TestCase):
+
+    def setUp(self):
+        self.author = create_user()
+        self.fan = create_user(username="fan", email="fan@test.com")
+        self.ribbit = create_ribbit(self.author)
+        self.client = get_auth_client(self.fan)
+        self.like_url = reverse("like-ribbit", kwargs={"pk": self.ribbit.pk})
+
+    def test_like_notifies_author(self):
+        self.client.post(self.like_url)
+        notif = Notification.objects.get(receiver=self.author)
+        self.assertEqual(notif.notif_type, "like")
+        self.assertEqual(notif.sender, self.fan)
+        self.assertEqual(notif.post, self.ribbit)
+
+    def test_unlike_removes_like_notification(self):
+        self.client.post(self.like_url)
+        self.client.post(self.like_url)
+        self.assertEqual(Notification.objects.count(), 0)
+        self.assertEqual(Like.objects.count(), 0)
+
+    def test_liking_own_ribbit_does_not_notify(self):
+        get_auth_client(self.author).post(self.like_url)
+        self.assertEqual(Like.objects.count(), 1)
+        self.assertEqual(Notification.objects.count(), 0)
+
+    def test_like_response_reports_count(self):
+        response = self.client.post(self.like_url)
+        self.assertEqual(response.data["status"], "liked")
+        self.assertEqual(response.data["likes_count"], 1)
+        self.assertTrue(response.data["is_liked"])
+
+    def test_comment_notifies_author(self):
+        self.client.post(reverse("comments", kwargs={"pk": self.ribbit.pk}), {"text": "Love it"})
+        notif = Notification.objects.get(receiver=self.author)
+        self.assertEqual(notif.notif_type, "comment")
+
+    def test_commenting_on_own_ribbit_does_not_notify(self):
+        get_auth_client(self.author).post(reverse("comments", kwargs={"pk": self.ribbit.pk}), {"text": "Self"})
+        self.assertEqual(Notification.objects.count(), 0)
+
+
+class ReplyTests(TestCase):
+
+    def setUp(self):
+        self.author = create_user()
+        self.commenter = create_user(username="commenter2", email="commenter2@test.com")
+        self.replier = create_user(username="replier", email="replier@test.com")
+        self.ribbit = create_ribbit(self.author)
+        self.comment = Comment.objects.create(ribbit=self.ribbit, author=self.commenter, text="First!")
+        self.url = reverse("comment-replies", kwargs={"comment_id": self.comment.pk})
+
+    def test_reply_to_comment(self):
+        response = get_auth_client(self.replier).post(self.url, {"text": "Agreed"})
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Reply.objects.get().comment, self.comment)
+
+    def test_reply_notifies_comment_author(self):
+        get_auth_client(self.replier).post(self.url, {"text": "Agreed"})
+        notif = Notification.objects.get(receiver=self.commenter)
+        self.assertEqual(notif.notif_type, "reply")
+        self.assertEqual(notif.post, self.ribbit)
+
+    def test_list_replies_only_for_that_comment(self):
+        other = Comment.objects.create(ribbit=self.ribbit, author=self.author, text="Other")
+        Reply.objects.create(comment=self.comment, author=self.replier, text="Here")
+        Reply.objects.create(comment=other, author=self.replier, text="Not here")
+        response = get_auth_client(self.replier).get(self.url)
+        results = response.data.get("results", response.data)
+        self.assertEqual([r["text"] for r in results], ["Here"])
+
+
+class RepostDetailTests(TestCase):
+
+    def setUp(self):
+        self.author = create_user()
+        self.reposter = create_user(username="reposter2", email="reposter2@test.com")
+        self.ribbit = create_ribbit(self.author, "Original")
+
+    def test_repost_links_to_original_and_keeps_opinion(self):
+        url = reverse("repost-with-opinion", kwargs={"pk": self.ribbit.pk})
+        get_auth_client(self.reposter).post(url, {"repost_text": "So true"}, format="json")
+        repost = Ribbit.objects.get(author=self.reposter)
+        self.assertTrue(repost.is_reribbit)
+        self.assertEqual(repost.reribbit_of, self.ribbit)
+        self.assertEqual(repost.text, "So true")
+
+    def test_owner_can_edit_ribbit(self):
+        url = reverse("edit", kwargs={"pk": self.ribbit.pk})
+        response = get_auth_client(self.author).patch(url, {"text": "Edited"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.ribbit.refresh_from_db()
+        self.assertEqual(self.ribbit.text, "Edited")
+
+    def test_non_owner_cannot_edit_ribbit(self):
+        url = reverse("edit", kwargs={"pk": self.ribbit.pk})
+        response = get_auth_client(self.reposter).patch(url, {"text": "Hacked"})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.ribbit.refresh_from_db()
+        self.assertEqual(self.ribbit.text, "Original")
+
+
+class FeedPaginationTests(TestCase):
+
+    def setUp(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        self.user = create_user()
+        self.other = create_user(username="other4", email="other4@test.com")
+        now = timezone.now()
+        for i in range(12):
+            Ribbit.objects.create(author=self.user, text=f"post {i}", created_at=now - timedelta(minutes=i))
+        Ribbit.objects.create(author=self.other, text="other post", created_at=now - timedelta(hours=1))
+        self.client = get_auth_client(self.user)
+
+    def test_feed_is_newest_first_in_pages_of_ten(self):
+        response = self.client.get(reverse("feed"))
+        texts = [r["text"] for r in response.data["results"]]
+        self.assertEqual(len(texts), 10)
+        self.assertEqual(texts[0], "post 0")
+        self.assertIsNotNone(response.data["next"])
+
+    def test_next_page_continues_where_first_stopped(self):
+        first = self.client.get(reverse("feed"))
+        second = self.client.get(first.data["next"])
+        texts = [r["text"] for r in second.data["results"]]
+        self.assertEqual(texts, ["post 10", "post 11", "other post"])
+        self.assertIsNone(second.data["next"])
+
+    def test_filter_feed_by_username(self):
+        response = self.client.get(reverse("feed"), {"username": "other4"})
+        self.assertEqual([r["text"] for r in response.data["results"]], ["other post"])
+
+
+class NewPostEmailSignalTests(TestCase):
+
+    def setUp(self):
+        self.author = create_user()
+        self.follower = create_user(username="follower", email="follower@test.com")
+        self.follower.following.add(self.author)
+
+    def test_original_post_queues_email_for_followers(self):
+        create_ribbit(self.author, "Big news")
+        email = EmailQueue.objects.get()
+        self.assertEqual(email.recipient, self.follower)
+        self.assertEqual(email.status, "pending")
+
+    def test_reply_and_repost_do_not_queue_emails(self):
+        original = Ribbit.objects.create(author=self.follower, text="Mine")
+        Ribbit.objects.create(author=self.author, text="reply", parent=original)
+        Ribbit.objects.create(author=self.author, text="", is_reribbit=True, reribbit_of=original)
+        self.assertEqual(EmailQueue.objects.filter(recipient=self.follower).count(), 0)
+
+    def test_follower_who_opted_out_gets_no_email(self):
+        EmailPreferences.objects.create(user=self.follower, email_on_new_post_from_following=False)
+        create_ribbit(self.author)
+        self.assertEqual(EmailQueue.objects.count(), 0)
+
+    def test_master_switch_off_gets_no_email(self):
+        EmailPreferences.objects.create(user=self.follower, email_enabled=False)
+        create_ribbit(self.author)
+        self.assertEqual(EmailQueue.objects.count(), 0)
+
+
+@patch.dict("os.environ", {"CRON_SECRET": "test-cron-secret"})
+class CronEndpointTests(TestCase):
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = create_user()
+        self.email = EmailQueue.objects.create(
+            recipient=self.user, email_type="instant", subject="Hi", body_html="<p>Hi</p>", body_text="Hi",
+        )
+        self.url = reverse("cron-process-emails")
+        self.headers = {"HTTP_X_CRON_SECRET": "test-cron-secret"}
+
+    def test_wrong_secret_is_rejected(self):
+        response = self.client.post(self.url, HTTP_X_CRON_SECRET="nope")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_missing_secret_is_rejected(self):
+        response = self.client.post(self.url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    @patch("ribbits.email_queue.requests.post")
+    def test_successful_send_marks_email_sent(self, mock_post):
+        mock_post.return_value.status_code = 200
+        response = self.client.post(self.url, **self.headers)
+        self.assertEqual(response.data["sent"], 1)
+        self.email.refresh_from_db()
+        self.assertEqual(self.email.status, "sent")
+        self.assertIsNotNone(self.email.sent_at)
+        self.assertEqual(mock_post.call_args.kwargs["json"]["to"], self.user.email)
+
+    @patch("ribbits.email_queue.requests.post")
+    def test_failed_send_is_retried_then_marked_failed(self, mock_post):
+        mock_post.return_value.status_code = 500
+        for expected_status in ["pending", "pending", "failed"]:
+            self.client.post(self.url, **self.headers)
+            self.email.refresh_from_db()
+            self.assertEqual(self.email.status, expected_status)
+        self.assertEqual(self.email.retry_count, 3)
+        self.client.post(self.url, **self.headers)
+        self.assertEqual(mock_post.call_count, 3)
+
+    @patch("ribbits.email_queue.requests.post", side_effect=ConnectionError("service down"))
+    def test_service_down_counts_as_failure(self, mock_post):
+        response = self.client.post(self.url, **self.headers)
+        self.assertEqual(response.data["failed"], 1)
+        self.email.refresh_from_db()
+        self.assertEqual(self.email.retry_count, 1)
+        self.assertIn("service down", self.email.error_message)
+
+    def test_future_scheduled_email_is_not_sent_yet(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        EmailQueue.objects.update(scheduled_for=timezone.now() + timedelta(hours=1))
+        with patch("ribbits.email_queue.requests.post") as mock_post:
+            response = self.client.post(self.url, **self.headers)
+        self.assertEqual(response.data["sent"], 0)
+        mock_post.assert_not_called()
+
+    def test_stats_endpoint_reports_pending(self):
+        response = self.client.get(reverse("cron-stats"), {"secret": "test-cron-secret"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["pending"], 1)
+
+
+class EmailPreferencesApiTests(TestCase):
+
+    def setUp(self):
+        self.user = create_user()
+        self.client = get_auth_client(self.user)
+        self.url = reverse("email-preferences")
+
+    def test_get_creates_defaults(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["email_enabled"])
+        self.assertTrue(EmailPreferences.objects.filter(user=self.user).exists())
+
+    def test_patch_updates_only_own_preferences(self):
+        other = create_user(username="other5", email="other5@test.com")
+        EmailPreferences.objects.create(user=other)
+        response = self.client.patch(self.url, {"daily_digest": False}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(EmailPreferences.objects.get(user=self.user).daily_digest)
+        self.assertTrue(EmailPreferences.objects.get(user=other).daily_digest)
+
+    def test_unauthenticated_cannot_read_preferences(self):
+        response = APIClient().get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)

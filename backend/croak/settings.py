@@ -25,11 +25,19 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-4l-eiqt@9@(d#zykk*f-drqol*qr#wr9@l66$3t_*!+1bxy#b%'
+import sys
+TESTING = len(sys.argv) > 1 and sys.argv[1] == 'test'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv("DEBUG", "False").lower() in ("1", "true", "yes")
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    if not (DEBUG or TESTING):
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured("SECRET_KEY environment variable is required when DEBUG is off.")
+    SECRET_KEY = "django-insecure-local-development-only"
 
 ALLOWED_HOSTS = ['croak-bqg0.onrender.com' , 'localhost' , '127.0.0.1']
 
@@ -87,9 +95,6 @@ WSGI_APPLICATION = 'croak.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
-import sys
-TESTING = len(sys.argv) > 1 and sys.argv[1] == 'test'
 
 if TESTING:
     DATABASES = {
@@ -183,7 +188,8 @@ REST_FRAMEWORK = {
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=30),
+    "ROTATE_REFRESH_TOKENS": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
     "UPDATE_LAST_LOGIN": True,
 }

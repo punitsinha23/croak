@@ -1,5 +1,6 @@
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 from django.db.models import F
@@ -50,19 +51,13 @@ class CommunityViewSet(viewsets.ModelViewSet):
         ).first()
         
         if community.creator != self.request.user and (not membership or membership.role not in ['admin']):
-            return Response(
-                {'error': 'Only creator or admins can edit this community'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            raise PermissionDenied('Only creator or admins can edit this community')
         serializer.save()
 
     def perform_destroy(self, instance):
         # Only creator can delete
         if instance.creator != self.request.user:
-            return Response(
-                {'error': 'Only the creator can delete this community'},
-                status=status.HTTP_403_FORBIDDEN
-            )
+            raise PermissionDenied('Only the creator can delete this community')
         instance.delete()
 
     @action(detail=True, methods=['get'])

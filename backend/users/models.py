@@ -33,3 +33,16 @@ class OTP(models.Model):
 
     def __str__(self):
         return f"{self.email} - {self.otp}"
+
+class PendingSignup(models.Model):
+    email = models.EmailField(unique=True)
+    username = models.CharField(max_length=150, blank=True)
+    first_name = models.CharField(max_length=150)
+    bio = models.TextField(blank=True, null=True)
+    location = models.CharField(max_length=255, blank=True, null=True)
+    password = models.CharField(max_length=128)
+    profile_pic = CloudinaryField('media', folder='profiles', blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.email

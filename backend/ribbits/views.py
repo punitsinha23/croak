@@ -235,7 +235,12 @@ class CommentDeleteView(generics.DestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def delete(self, request, ribbit_id, comment_id):
-        comment = get_object_or_404(Comment, id=comment_id, ribbit_id=ribbit_id)
+        comment = get_object_or_404(Comment.objects.select_related("ribbit"), id=comment_id, ribbit_id=ribbit_id)
+        if request.user not in (comment.author, comment.ribbit.author):
+            return Response(
+                {"error": "You cannot delete someone else's comment."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         comment.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
     

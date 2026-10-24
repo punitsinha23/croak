@@ -5,8 +5,9 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 from datetime import timedelta
 from django.utils import timezone
-from django.core.cache import cache
+from django.db import transaction
 from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth.hashers import make_password
 from django.contrib.auth.models import update_last_login
 from rest_framework import generics, status, permissions
 from rest_framework.views import APIView
@@ -23,7 +24,7 @@ from .serializers import (
     ResetPasswordSerializer,
     GoogleLoginSerializer,
 )
-from .models import OTP
+from .models import OTP, PendingSignup
 
 User = get_user_model()
 
@@ -32,6 +33,16 @@ User = get_user_model()
 def generate_otp():
     """Generate a 6-digit OTP."""
     return str(random.randint(100000, 999999))
+
+
+def unique_username_from_email(email):
+    base_username = email.split("@")[0]
+    username = base_username
+    counter = 1
+    while User.objects.filter(username=username).exists():
+        username = f"{base_username}{counter}"
+        counter += 1
+    return username
 
 
 def send_otp_email(email, otp):
@@ -165,13 +176,7 @@ class GoogleLoginView(APIView):
 
             if created:
                 # Set a random username if not provided
-                base_username = email.split("@")[0]
-                username = base_username
-                counter = 1
-                while User.objects.filter(username=username).exists():
-                    username = f"{base_username}{counter}"
-                    counter += 1
-                user.username = username
+                user.username = unique_username_from_email(email)
                 user.set_unusable_password()
                 user.save()
 
@@ -225,8 +230,18 @@ class RegisterView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        # store registration data temporarily in cache (5 minutes)
-        cache.set(email, serializer.validated_data, timeout=300)
+        data = serializer.validated_data
+        PendingSignup.objects.update_or_create(
+            email=email,
+            defaults={
+                "username": data.get("username") or "",
+                "first_name": data["first_name"],
+                "bio": data.get("bio"),
+                "location": data.get("location"),
+                "password": make_password(data["password"]),
+                "profile_pic": data.get("profile_pic"),
+            },
+        )
 
         return Response(
             {"message": "OTP sent to your email."},
@@ -268,29 +283,45 @@ class VerifyOtpView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        otp_entry.is_verified = True
-        otp_entry.save()
-
-        # get cached user data
-        user_data = cache.get(email)
-        if not user_data:
+        pending = PendingSignup.objects.filter(email=email).first()
+        if not pending:
             return Response(
                 {"error": "No registration data found. Please register again."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # create the user now that OTP is valid
-        serializer = RegisterSerializer(data=user_data)
-        serializer.is_valid(raise_exception=True)
-        user = serializer.save()
+        username = pending.username
+        if username and User.objects.filter(username=username).exists():
+            return Response(
+                {"error": "That username was taken. Please register again."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # clear the cached data
-        cache.delete(email)
+        with transaction.atomic():
+            otp_entry.is_verified = True
+            otp_entry.save()
 
+            # create the user now that OTP is valid
+            user = User(
+                email=email,
+                username=username or unique_username_from_email(email),
+                first_name=pending.first_name,
+                bio=pending.bio or "",
+                location=pending.location,
+                profile_pic=pending.profile_pic,
+                password=pending.password,
+            )
+            user.save()
+            pending.delete()
+
+        update_last_login(None, user)
+        refresh = RefreshToken.for_user(user)
         return Response(
             {
                 "message": "Email verified and account created successfully!",
-                "user": UserSerializer(user).data
+                "user": UserSerializer(user).data,
+                "refresh": str(refresh),
+                "access": str(refresh.access_token),
             },
             status=status.HTTP_201_CREATED,
         )
