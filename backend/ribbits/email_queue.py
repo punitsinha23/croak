@@ -223,55 +223,56 @@ def cleanup_old_emails(days=30):
     return deleted_count
 
 
-def queue_new_post_notification(post, followers):
-    """
-    Queue email notifications to followers when someone they follow creates a new post
-    
-    Args:
-        post: Ribbit object (the new post)
-        followers: QuerySet or list of User objects who follow the post author
-    """
-    from django.contrib.auth import get_user_model
-    User = get_user_model()
-    
-    queued_count = 0
-    
-    for follower in followers:
-        # Check if user wants these emails
-        prefs = get_user_email_prefs(follower)
-        if not prefs.email_enabled or not prefs.email_on_new_post_from_following:
+def _prefs_or_none(user):
+    try:
+        return user.email_preferences
+    except EmailPreferences.DoesNotExist:
+        return None
+
+
+def queue_new_post_broadcast(post):
+    from .email_templates import get_new_post_broadcast_email
+
+    author = post.author
+    follower_ids = set(author.followers.values_list("id", flat=True))
+    already_waiting = EmailQueue.objects.filter(email_type="new_post", status="pending").values_list("recipient_id", flat=True)
+
+    recipients = (
+        User.objects.filter(is_active=True)
+        .exclude(email="")
+        .exclude(pk=author.pk)
+        .exclude(pk__in=already_waiting)
+        .exclude(email_preferences__email_enabled=False)
+        .select_related("email_preferences")
+    )
+
+    emails = []
+    for recipient in recipients:
+        prefs = _prefs_or_none(recipient)
+        is_follower = recipient.id in follower_ids
+        if prefs and not (prefs.email_on_new_post_from_following if is_follower else prefs.email_on_new_post_from_anyone):
             continue
-            
-        if not follower.email:
-            continue
-        
-        # Prepare context for email template
-        context = {
-            'author_name': post.author.first_name or post.author.username,
-            'author_username': post.author.username,
-            'post_text': post.text,
-            'post_url': f'https://croak-green-shine.vercel.app/post/{post.id}',
-            'has_media': bool(post.media),
-            'recipient_name': follower.first_name or follower.username,
-        }
-        
-        # Generate email content
-        subject, html_body, text_body = generate_notification_email('new_post_from_following', context)
-        
-        # Queue the email
-        EmailQueue.objects.create(
-            recipient=follower,
-            email_type='instant',
+
+        subject, html_body, text_body = get_new_post_broadcast_email({
+            "author_name": author.first_name or author.username,
+            "author_username": author.username,
+            "post_text": post.text,
+            "has_media": bool(post.media),
+            "is_follower": is_follower,
+            "recipient_name": recipient.first_name or recipient.username,
+        })
+        emails.append(EmailQueue(
+            recipient=recipient,
+            email_type="new_post",
             subject=subject,
             body_html=html_body,
             body_text=text_body,
-            priority=4,  # Medium-low priority
-            scheduled_for=timezone.now()
-        )
-        
-        queued_count += 1
-    
-    return queued_count
+            priority=4,
+            scheduled_for=timezone.now(),
+        ))
+
+    EmailQueue.objects.bulk_create(emails)
+    return len(emails)
 
 
 def queue_daily_reminder(recipient):
@@ -356,3 +357,66 @@ def queue_weekly_nudge(recipient, needs_post_reminder=False, suggested_users=Non
 
     return email
 
+
+
+EVENING_TIMEZONE = "Asia/Kolkata"
+EVENING_HOUR = 20
+
+
+def queue_evening_checkins(now=None):
+    from zoneinfo import ZoneInfo
+    from django.db.models import Count, F
+    from .models import Ribbit
+    from .email_templates import get_evening_checkin_email
+
+    now = now or timezone.now()
+    local_now = now.astimezone(ZoneInfo(EVENING_TIMEZONE))
+    send_at_local = local_now.replace(hour=EVENING_HOUR, minute=0, second=0, microsecond=0)
+    send_at = max(send_at_local, local_now)
+    day_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    todays_posts = Ribbit.objects.filter(created_at__gte=day_start, created_at__lte=now, parent__isnull=True, is_reribbit=False)
+    top_posts = (
+        todays_posts.select_related("author")
+        .annotate(likes_total=Count("likes", distinct=True), comments_total=Count("comments", distinct=True))
+        .annotate(engagement=F("likes_total") + F("comments_total"))
+        .order_by("-engagement", "-created_at")[:3]
+    )
+    data = {
+        "post_count": todays_posts.count(),
+        "top_posts": [
+            {
+                "author_name": post.author.first_name or post.author.username,
+                "author_username": post.author.username,
+                "text": post.text,
+                "likes": post.likes_total,
+                "comments": post.comments_total,
+            }
+            for post in top_posts
+        ],
+    }
+
+    already_sent_today = EmailQueue.objects.filter(email_type="evening", created_at__gte=day_start).values_list("recipient_id", flat=True)
+    recipients = (
+        User.objects.filter(is_active=True)
+        .exclude(email="")
+        .exclude(pk__in=already_sent_today)
+        .exclude(email_preferences__email_enabled=False)
+        .exclude(email_preferences__evening_checkin=False)
+    )
+
+    emails = []
+    for recipient in recipients:
+        subject, html_body, text_body = get_evening_checkin_email(recipient, data, local_now.date())
+        emails.append(EmailQueue(
+            recipient=recipient,
+            email_type="evening",
+            subject=subject,
+            body_html=html_body,
+            body_text=text_body,
+            priority=3,
+            scheduled_for=send_at,
+        ))
+
+    EmailQueue.objects.bulk_create(emails)
+    return len(emails)

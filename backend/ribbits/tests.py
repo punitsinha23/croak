@@ -596,3 +596,155 @@ class EmailPreferencesApiTests(TestCase):
     def test_unauthenticated_cannot_read_preferences(self):
         response = APIClient().get(self.url)
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class NewPostBroadcastTests(TestCase):
+
+    def setUp(self):
+        self.author = create_user(username="author", email="author@test.com")
+        self.follower = create_user(username="follower2", email="follower2@test.com")
+        self.stranger = create_user(username="stranger2", email="stranger2@test.com")
+        self.follower.following.add(self.author)
+
+    def emails_for(self, user):
+        return EmailQueue.objects.filter(recipient=user, email_type="new_post")
+
+    def test_everyone_except_author_is_emailed(self):
+        create_ribbit(self.author, "Hello everyone")
+        self.assertEqual(self.emails_for(self.follower).count(), 1)
+        self.assertEqual(self.emails_for(self.stranger).count(), 1)
+        self.assertEqual(self.emails_for(self.author).count(), 0)
+
+    def test_followers_and_others_get_different_subjects(self):
+        create_ribbit(self.author, "Big news today")
+        self.assertIn("just croaked", self.emails_for(self.follower).get().subject)
+        self.assertIn("Fresh on Croak", self.emails_for(self.stranger).get().subject)
+
+    def test_anyone_opt_out_only_affects_non_followers(self):
+        EmailPreferences.objects.create(user=self.stranger, email_on_new_post_from_anyone=False)
+        EmailPreferences.objects.create(user=self.follower, email_on_new_post_from_anyone=False)
+        create_ribbit(self.author)
+        self.assertEqual(self.emails_for(self.stranger).count(), 0)
+        self.assertEqual(self.emails_for(self.follower).count(), 1)
+
+    def test_inactive_and_emailless_users_are_skipped(self):
+        inactive = create_user(username="gone", email="gone@test.com")
+        inactive.is_active = False
+        inactive.save()
+        no_email = create_user(username="noemail", email="placeholder@test.com")
+        User.objects.filter(pk=no_email.pk).update(email="")
+        create_ribbit(self.author)
+        self.assertEqual(self.emails_for(inactive).count(), 0)
+        self.assertEqual(self.emails_for(no_email).count(), 0)
+
+    def test_burst_of_posts_sends_one_pending_email_per_person(self):
+        create_ribbit(self.author, "one")
+        create_ribbit(self.author, "two")
+        create_ribbit(self.author, "three")
+        self.assertEqual(self.emails_for(self.stranger).count(), 1)
+
+    def test_new_email_queued_once_previous_one_was_sent(self):
+        create_ribbit(self.author, "one")
+        EmailQueue.objects.update(status="sent")
+        create_ribbit(self.author, "two")
+        self.assertEqual(self.emails_for(self.stranger).filter(status="pending").count(), 1)
+
+    def test_post_text_is_escaped_and_links_to_profile(self):
+        create_ribbit(self.author, '<a href="https://evil.test">click</a>')
+        html = self.emails_for(self.stranger).get().body_html
+        self.assertNotIn('<a href="https://evil.test">', html)
+        self.assertIn("&lt;a href=", html)
+        self.assertIn("https://croak-green-shine.vercel.app/user/author", html)
+
+
+class EveningCheckinTests(TestCase):
+
+    def setUp(self):
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        self.ist = ZoneInfo("Asia/Kolkata")
+        self.at_730pm = datetime(2026, 10, 24, 19, 30, tzinfo=self.ist)
+        self.poster = create_user(username="poster", email="poster@test.com")
+        self.reader = create_user(username="reader", email="reader@test.com")
+
+    def queue(self, now=None):
+        from .email_queue import queue_evening_checkins
+        return queue_evening_checkins(now=now or self.at_730pm)
+
+    def post_at(self, text, hour, likes=0, day=24):
+        from datetime import datetime
+        ribbit = Ribbit.objects.create(author=self.poster, text=text, created_at=datetime(2026, 10, day, hour, 0, tzinfo=self.ist))
+        for i in range(likes):
+            fan = create_user(username=f"fan{text[:3]}{i}", email=f"fan{text[:3]}{i}@test.com")
+            EmailPreferences.objects.create(user=fan, evening_checkin=False)
+            Like.objects.create(ribbit=ribbit, user=fan)
+        EmailQueue.objects.all().delete()
+        return ribbit
+
+    def test_queued_for_8pm_india_time(self):
+        from datetime import datetime
+        self.assertEqual(self.queue(), 2)
+        email = EmailQueue.objects.filter(email_type="evening").first()
+        self.assertEqual(email.scheduled_for, datetime(2026, 10, 24, 20, 0, tzinfo=self.ist))
+
+    def test_running_after_8pm_sends_right_away(self):
+        from datetime import datetime
+        late = datetime(2026, 10, 24, 21, 15, tzinfo=self.ist)
+        self.queue(now=late)
+        self.assertEqual(EmailQueue.objects.filter(email_type="evening").first().scheduled_for, late)
+
+    def test_running_twice_does_not_double_send(self):
+        self.queue()
+        self.assertEqual(self.queue(), 0)
+        self.assertEqual(EmailQueue.objects.filter(email_type="evening").count(), 2)
+
+    def test_opted_out_users_are_skipped(self):
+        EmailPreferences.objects.create(user=self.reader, evening_checkin=False)
+        EmailPreferences.objects.create(user=self.poster, email_enabled=False)
+        self.assertEqual(self.queue(), 0)
+
+    def test_includes_todays_top_posts_most_loved_first(self):
+        self.post_at("quiet morning thought", 9, likes=1)
+        self.post_at("everyone loved this", 12, likes=3)
+        self.post_at("from yesterday", 12, likes=9, day=23)
+        self.queue()
+        html = EmailQueue.objects.get(recipient=self.reader, email_type="evening").body_html
+        self.assertIn("2 croaks", html)
+        self.assertNotIn("from yesterday", html)
+        self.assertLess(html.index("everyone loved this"), html.index("quiet morning thought"))
+
+    def test_quiet_day_invites_the_first_post(self):
+        self.queue()
+        email = EmailQueue.objects.get(recipient=self.reader, email_type="evening")
+        self.assertIn("quiet in the pond", email.body_html)
+        self.assertIn("https://croak-green-shine.vercel.app/index", email.body_html)
+
+    def test_post_text_is_escaped(self):
+        self.post_at("<img src=x onerror=alert(1)>", 10)
+        self.queue()
+        html = EmailQueue.objects.get(recipient=self.reader, email_type="evening").body_html
+        self.assertNotIn("<img src=x", html)
+
+    def test_prompt_changes_each_day(self):
+        from datetime import timedelta
+        self.queue()
+        self.queue(now=self.at_730pm + timedelta(days=1))
+        subjects = set(EmailQueue.objects.filter(recipient=self.reader).values_list("subject", flat=True))
+        self.assertEqual(len(subjects), 2)
+
+    @patch.dict("os.environ", {"CRON_SECRET": "test-cron-secret"})
+    def test_cron_endpoint_requires_secret(self):
+        client = APIClient()
+        url = reverse("cron-evening-checkin")
+        self.assertEqual(client.post(url, HTTP_X_CRON_SECRET="wrong").status_code, status.HTTP_403_FORBIDDEN)
+        response = client.post(url, HTTP_X_CRON_SECRET="test-cron-secret")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["queued"], 2)
+
+    def test_preferences_api_exposes_new_toggles(self):
+        client = get_auth_client(self.reader)
+        response = client.patch(reverse("email-preferences"), {"evening_checkin": False, "email_on_new_post_from_anyone": False}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        prefs = EmailPreferences.objects.get(user=self.reader)
+        self.assertFalse(prefs.evening_checkin)
+        self.assertFalse(prefs.email_on_new_post_from_anyone)

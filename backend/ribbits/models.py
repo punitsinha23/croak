@@ -88,6 +88,8 @@ class EmailQueue(models.Model):
         ('instant', 'Instant Notification'),
         ('digest', 'Daily Digest'),
         ('weekly', 'Weekly Summary'),
+        ('new_post', 'New Post'),
+        ('evening', 'Evening Check-in'),
     ]
     
     STATUS_CHOICES = [
@@ -132,10 +134,12 @@ class EmailPreferences(models.Model):
     email_on_mention = models.BooleanField(default=True)
     email_on_reply = models.BooleanField(default=True)
     email_on_new_post_from_following = models.BooleanField(default=True)
+    email_on_new_post_from_anyone = models.BooleanField(default=True)
     
     # Digest emails
     daily_digest = models.BooleanField(default=True)
     weekly_summary = models.BooleanField(default=False)
+    evening_checkin = models.BooleanField(default=True)
     
     # Timing preferences
     digest_time = models.TimeField(default='09:00:00')  # 9 AM

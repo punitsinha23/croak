@@ -13,7 +13,7 @@ from django.utils import timezone
 from datetime import timedelta
 from django.db.models import Count
 from ribbits.models import Ribbit, Like, Comment
-from ribbits.email_queue import queue_daily_digest, queue_daily_reminder, queue_weekly_nudge
+from ribbits.email_queue import queue_daily_digest, queue_daily_reminder, queue_weekly_nudge, queue_evening_checkins
 import os
 
 User = get_user_model()
@@ -259,6 +259,16 @@ def send_weekly_nudges_endpoint(request):
             'status': 'error',
             'message': str(e)
         }, status=500)
+
+
+@api_view(['POST', 'GET'])
+@permission_classes([AllowAny])
+def send_evening_checkins_endpoint(request):
+    if not verify_cron_secret(request):
+        return Response({'error': 'Unauthorized'}, status=403)
+
+    queued = queue_evening_checkins()
+    return Response({'status': 'success', 'queued': queued, 'timestamp': timezone.now().isoformat()})
 
 
 @api_view(['GET'])

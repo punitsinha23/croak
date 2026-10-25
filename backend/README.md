@@ -137,7 +137,8 @@ Comments on a post are a separate `Comment` model, and replies to a comment are 
 Email is deliberately kept **out of the request path**:
 
 1. **Something worth emailing happens.** Right now that's:
-   - a new original post, which emails the author's followers via a `post_save` signal in `signals.py`
+   - a new original post, which emails **everyone** except the author via a `post_save` signal in `signals.py`. Followers get a "someone you follow" version. To avoid floods, nobody gets a second new-post email while one is still waiting to be sent
+   - the 8 PM check-in (IST): a rotating fun question, the day's most-loved posts, and a "Croak about your day" button, or a "be the first croak tonight" version on quiet days
    - the daily digest or "you're missing out" reminder
    - the weekly nudge, with post reminders and suggested people to follow
 2. **A row goes into `EmailQueue`** (status `pending`, a priority and a `scheduled_for` time), but only if the recipient's `EmailPreferences` allow it. There's a master switch plus per-type toggles, and preferences are created with defaults on first access.
@@ -145,6 +146,7 @@ Email is deliberately kept **out of the request path**:
    - `process-emails` every 5 minutes, which takes up to 100 due emails in priority order and POSTs each to the notifications service
    - `daily-digest` at 09:00 UTC
    - `weekly-nudges` on Mondays at 10:00 UTC
+   - `evening-checkin` at 14:00 UTC (7:30 PM IST), which queues emails timed for 8:00 PM IST so that GitHub's late scheduled runs don't make them late
 4. **Results are written back.** Success sets `sent` and `sent_at`. Failure stores the error and retries on later runs. After 3 failed attempts the email is marked `failed` and left alone.
 
 `/api/ribbit/cron/stats/` reports pending, failed and sent-today counts. The same jobs exist as management commands (`process_email_queue`, `send_daily_digests`, …) for running by hand.
@@ -205,6 +207,7 @@ All routes are under `/api/`. Unless noted, they need `Authorization: Bearer <ac
 | POST | `cron/process-emails/` | cron secret | Send due queued emails |
 | POST | `cron/daily-digest/` | cron secret | Queue daily digests |
 | POST | `cron/weekly-nudges/` | cron secret | Queue weekly nudges |
+| POST | `cron/evening-checkin/` | cron secret | Queue 8 PM check-in emails |
 | GET | `cron/stats/` | cron secret | Queue statistics |
 
 </details>
@@ -298,7 +301,7 @@ python manage.py test ribbits    # one app
 
 Tests run against an **in-memory SQLite** database (switched automatically in `settings.py` when the command is `test`), so no Postgres, Cloudinary or network access is needed. Outgoing calls to Google and the notifications service are mocked.
 
-What's covered (142 tests):
+What's covered (159 tests):
 
 - **users:**
   - signup → OTP verify (wrong and expired codes, pending signups stored in the database, auto-login)
@@ -311,7 +314,8 @@ What's covered (142 tests):
   - feed order and cursor pagination
   - likes and notifications (no self-notify, unlike cleans up)
   - comments, replies, reposts and search
-  - the new-post email signal and opt-outs
+  - the new-post broadcast (everyone but the author, opt-outs, flood guard, HTML escaping)
+  - the 8 PM check-in (timing, no double sends, top posts, quiet days, opt-outs)
   - cron endpoints: secret check, send, retry three times then fail, scheduled emails
   - email preferences
 - **communities:**

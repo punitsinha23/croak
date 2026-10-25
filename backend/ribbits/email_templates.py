@@ -266,6 +266,7 @@ Croak - Free Voices. Real Connections.
 
 def get_daily_digest_email(digest_data, recipient):
     """Daily digest email with summary of activity"""
+    from html import escape
     new_followers = digest_data.get('new_followers', 0)
     total_likes = digest_data.get('total_likes', 0)
     total_comments = digest_data.get('total_comments', 0)
@@ -290,8 +291,8 @@ def get_daily_digest_email(digest_data, recipient):
         for post in trending_posts[:3]:
             trending_html += f"""
             <div style="background-color: #f9fafb; padding: 15px; border-radius: 6px; margin: 10px 0;">
-                <p style="margin: 0; font-weight: 500;">@{post.get('author', 'user')}</p>
-                <p style="margin: 5px 0;">{post.get('text', '')[:150]}...</p>
+                <p style="margin: 0; font-weight: 500;">@{escape(post.get('author', 'user'))}</p>
+                <p style="margin: 5px 0;">{escape(post.get('text', '')[:150])}...</p>
                 <p style="margin: 5px 0; color: #6b7280; font-size: 14px;">
                     ❤️ {post.get('likes', 0)} · 💬 {post.get('comments', 0)}
                 </p>
@@ -303,7 +304,7 @@ def get_daily_digest_email(digest_data, recipient):
         <p>Here's what happened on Croak while you were away:</p>
         {stats_html}
         {trending_html}
-        <a href="https://croak.com" class="button">Open Croak</a>
+        <a href="https://croak-green-shine.vercel.app/index" class="button">Open Croak</a>
     """
     
     html_body = get_base_template(html_content, recipient.first_name or recipient.username)
@@ -321,7 +322,7 @@ Here's your daily Croak digest:
 🔥 Trending on Croak:
 {chr(10).join([f"@{p.get('author')}: {p.get('text', '')[:100]}..." for p in trending_posts[:3]])}
 
-Open Croak: https://croak.com
+Open Croak: https://croak-green-shine.vercel.app/index
 
 ---
 Croak - Free Voices. Real Connections.
@@ -646,3 +647,188 @@ def get_weekly_nudge_email(recipient, needs_post_reminder=False, suggested_users
 
     return subject, html_body, text_body
 
+
+
+SITE_URL = "https://croak-green-shine.vercel.app"
+
+BLUE = "#1d9bf0"
+INK = "#0f1419"
+MUTED = "#536471"
+CARD = "#f7f9fa"
+
+
+def _shell(preheader, inner_html, footer_reason):
+    from html import escape
+    return f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light">
+</head>
+<body style="margin:0;padding:0;background:#eef3f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">{escape(preheader)}&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;&#847;&zwnj;&nbsp;</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef3f7;">
+<tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:20px;overflow:hidden;">
+<tr><td style="padding:22px 28px 0 28px;">
+<span style="font-size:22px;font-weight:900;letter-spacing:-0.5px;color:{BLUE};">CROAK</span>
+</td></tr>
+{inner_html}
+<tr><td style="padding:22px 28px 26px 28px;border-top:1px solid #eef1f3;">
+<p style="margin:0;font-size:12px;line-height:18px;color:{MUTED};">{footer_reason}
+<a href="{SITE_URL}/email-settings" style="color:{MUTED};text-decoration:underline;">Change email settings</a></p>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>"""
+
+
+def _button(label, url):
+    return f"""<table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 0 0;">
+<tr><td style="background:{BLUE};border-radius:999px;">
+<a href="{url}" style="display:inline-block;padding:14px 28px;font-size:16px;font-weight:800;color:#ffffff;text-decoration:none;">{label}</a>
+</td></tr></table>"""
+
+
+def _post_card(author_name, username, text, footer=""):
+    from html import escape
+    body = escape(text).replace("\n", "<br>") if text else f'<span style="color:{MUTED};font-style:italic;">shared a photo or video</span>'
+    return f"""<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:{CARD};border-radius:16px;margin:0 0 12px 0;">
+<tr><td style="padding:16px 18px;">
+<p style="margin:0 0 6px 0;font-size:14px;color:{INK};"><strong>{escape(author_name)}</strong> <span style="color:{MUTED};">@{escape(username)}</span></p>
+<p style="margin:0;font-size:16px;line-height:24px;color:{INK};">{body}</p>
+{footer}
+</td></tr></table>"""
+
+
+def get_new_post_broadcast_email(context):
+    from html import escape
+    author_name = context["author_name"]
+    username = context["author_username"]
+    text = context.get("post_text") or ""
+    is_follower = context.get("is_follower", False)
+    recipient_name = context.get("recipient_name", "there")
+    profile_url = f"{SITE_URL}/user/{username}"
+
+    snippet = " ".join(text.split())
+    if len(snippet) > 45:
+        snippet = snippet[:45].rstrip() + "…"
+
+    if is_follower:
+        subject = f"{author_name} just croaked: “{snippet}”" if snippet else f"{author_name} just shared something new"
+        kicker = "SOMEONE YOU FOLLOW JUST POSTED"
+    else:
+        subject = f"Fresh on Croak: “{snippet}”" if snippet else f"{author_name} just dropped something on Croak"
+        kicker = "FRESH FROM THE POND"
+
+    media_note = ""
+    if context.get("has_media"):
+        media_note = f'<p style="margin:10px 0 0 0;font-size:13px;color:{MUTED};">📎 Includes a photo or video</p>'
+
+    inner = f"""<tr><td style="padding:18px 28px 6px 28px;">
+<p style="margin:0 0 6px 0;font-size:12px;font-weight:800;letter-spacing:1.5px;color:{BLUE};">{kicker}</p>
+<h1 style="margin:0 0 18px 0;font-size:26px;line-height:32px;font-weight:900;color:{INK};">{escape(author_name)} has something to say 👀</h1>
+{_post_card(author_name, username, text, media_note)}
+</td></tr>
+<tr><td style="padding:8px 28px 24px 28px;">
+{_button("Jump into the conversation →", profile_url)}
+</td></tr>"""
+
+    html_body = _shell(
+        f"Hey {recipient_name}, {author_name} just posted. Be the first to reply.",
+        inner,
+        "You're getting this because new-post emails are on.",
+    )
+    text_body = f"""Hey {recipient_name},
+
+{author_name} (@{username}) just posted on Croak:
+
+"{text or 'shared a photo or video'}"
+
+Jump in: {profile_url}
+
+Change email settings: {SITE_URL}/email-settings
+"""
+    return subject, html_body, text_body
+
+
+EVENING_PROMPTS = [
+    ("🌙 What was the best part of your day?", "What was the best part of your day?", "Big or tiny, it counts. Tell the pond."),
+    ("😂 Okay but what made you laugh today?", "What made you laugh today?", "Memes, people, your own bad jokes. All welcome."),
+    ("🏆 Tiny win check: what did you pull off today?", "What's one tiny win from today?", "Finished a task? Drank water? We celebrate everything here."),
+    ("🔥 Hot take hour is open", "Drop your hottest take.", "Keep it spicy. Keep it kind."),
+    ("🎧 What's been on repeat today?", "What song had you on repeat today?", "Share the track. Judge-free zone. Mostly."),
+    ("🍜 Be honest: what did you eat today?", "What did you eat today?", "Gourmet or instant noodles, we want the details."),
+    ("📸 Show us one thing from today", "Show us one photo from today.", "No filters needed. Okay, maybe one."),
+    ("💭 Got a shower thought for us?", "Got a shower thought?", "The weirder, the better."),
+    ("✨ What are you looking forward to?", "What's one thing you're looking forward to?", "Tomorrow, this week, someday. Say it out loud."),
+    ("☕ Real talk: how was today, really?", "How was today, really?", "Good, bad, chaotic. The pond is listening."),
+    ("📚 Learned anything cool today?", "What's one thing you learned today?", "Fun facts and life lessons both qualify."),
+    ("🙌 Who made your day better?", "Who made your day a little better?", "Shout them out. They'll love it."),
+]
+
+
+def get_evening_prompt(day):
+    return EVENING_PROMPTS[day.toordinal() % len(EVENING_PROMPTS)]
+
+
+def get_evening_checkin_email(recipient, data, day):
+    from html import escape
+    subject, headline, nudge = get_evening_prompt(day)
+    name = recipient.first_name or recipient.username
+    post_count = data.get("post_count", 0)
+    top_posts = data.get("top_posts", [])
+    compose_url = f"{SITE_URL}/index"
+
+    if post_count:
+        croaks = "croak" if post_count == 1 else "croaks"
+        intro = f"The pond heard <strong>{post_count} {croaks}</strong> today. Here's what people loved:"
+        preheader = f"{post_count} {croaks} today. Here's what you missed, plus tonight's question."
+    else:
+        intro = "It's quiet in the pond tonight. Perfect timing to be the first voice of the evening."
+        preheader = "It's quiet tonight. Be the first croak of the evening."
+
+    cards = ""
+    for post in top_posts[:3]:
+        stats = f'<p style="margin:10px 0 0 0;font-size:13px;color:{MUTED};">❤️ {post["likes"]} &nbsp;·&nbsp; 💬 {post["comments"]}</p>'
+        text = post["text"]
+        if len(text) > 180:
+            text = text[:180].rstrip() + "…"
+        cards += _post_card(post["author_name"], post["author_username"], text, stats)
+
+    inner = f"""<tr><td style="padding:18px 28px 0 28px;">
+<p style="margin:0 0 14px 0;font-size:12px;font-weight:800;letter-spacing:1.5px;color:{BLUE};">YOUR 8 PM CHECK-IN</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:{BLUE};border-radius:18px;">
+<tr><td style="padding:26px 24px;">
+<p style="margin:0 0 8px 0;font-size:15px;color:#d6ecfd;">Hey {escape(name)}, tonight's question:</p>
+<h1 style="margin:0 0 10px 0;font-size:30px;line-height:36px;font-weight:900;color:#ffffff;">{escape(headline)}</h1>
+<p style="margin:0;font-size:15px;line-height:22px;color:#e8f4fe;">{escape(nudge)}</p>
+</td></tr></table>
+</td></tr>
+<tr><td style="padding:22px 28px 4px 28px;">
+<p style="margin:0 0 14px 0;font-size:15px;line-height:22px;color:{INK};">{intro}</p>
+{cards}
+</td></tr>
+<tr><td style="padding:10px 28px 26px 28px;">
+{_button("Croak about your day →", compose_url)}
+</td></tr>"""
+
+    html_body = _shell(preheader, inner, "You get this at 8 PM because evening check-ins are on.")
+
+    top_text = "\n".join(f"- @{p['author_username']}: {p['text'][:120]}" for p in top_posts[:3])
+    text_body = f"""Hey {name}, tonight's question:
+
+{headline}
+{nudge}
+
+{f"{post_count} croaks today. Top ones:" if post_count else "It's quiet tonight. Be the first croak of the evening."}
+{top_text}
+
+Croak about your day: {compose_url}
+
+Change email settings: {SITE_URL}/email-settings
+"""
+    return subject, html_body, text_body
