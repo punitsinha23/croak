@@ -396,7 +396,7 @@ def queue_evening_checkins(now=None):
         ],
     }
 
-    already_sent_today = EmailQueue.objects.filter(email_type="evening", created_at__gte=day_start).values_list("recipient_id", flat=True)
+    already_sent_today = EmailQueue.objects.filter(email_type="evening", scheduled_for__gte=day_start).values_list("recipient_id", flat=True)
     recipients = (
         User.objects.filter(is_active=True)
         .exclude(email="")

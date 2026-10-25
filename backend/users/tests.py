@@ -375,6 +375,22 @@ class GoogleLoginTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class FastLoginTests(TestCase):
+
+    def test_login_response_includes_profile(self):
+        create_user(username="speedy", email="speedy@test.com")
+        response = APIClient().post(reverse("login"), {"email": "speedy@test.com", "password": "StrongPass123!"})
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["user"]["username"], "speedy")
+        self.assertIn("access", response.data)
+
+    def test_health_endpoint_is_public_and_skips_the_database(self):
+        with self.assertNumQueries(0):
+            response = self.client.get(reverse("health"))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok"})
+
+
 class TokenLifetimeTests(TestCase):
 
     def setUp(self):
