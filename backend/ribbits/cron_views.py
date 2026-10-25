@@ -254,6 +254,16 @@ def send_evening_checkins_endpoint(request):
     return Response({'status': 'success', 'queued': queued, 'timestamp': timezone.now().isoformat()})
 
 
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def clear_pending_emails_endpoint(request):
+    if not verify_cron_secret(request):
+        return Response({'error': 'Unauthorized'}, status=403)
+
+    deleted, _ = EmailQueue.objects.filter(status='pending').delete()
+    return Response({'status': 'success', 'deleted': deleted, 'timestamp': timezone.now().isoformat()})
+
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def email_queue_stats(request):

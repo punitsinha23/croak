@@ -10,6 +10,7 @@ from .cron_views import (
     send_daily_digests_endpoint,
     send_weekly_nudges_endpoint,
     send_evening_checkins_endpoint,
+    clear_pending_emails_endpoint,
     email_queue_stats,
 )
 
@@ -36,6 +37,7 @@ urlpatterns = [
     path('cron/daily-digest/', send_daily_digests_endpoint, name='cron-daily-digest'),
     path('cron/weekly-nudges/', send_weekly_nudges_endpoint, name='cron-weekly-nudges'),
     path('cron/evening-checkin/', send_evening_checkins_endpoint, name='cron-evening-checkin'),
+    path('cron/clear-pending/', clear_pending_emails_endpoint, name='cron-clear-pending'),
     path('cron/stats/', email_queue_stats, name='cron-stats'),
     ]
 

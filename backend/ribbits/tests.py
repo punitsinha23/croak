@@ -620,6 +620,28 @@ class CronEndpointTests(TestCase):
         second.refresh_from_db()
         self.assertEqual(second.status, "sent")
 
+    def test_clear_pending_deletes_only_unsent_emails(self):
+        sent = EmailQueue.objects.create(
+            recipient=self.user, email_type="instant", subject="Old", body_html="x", body_text="x", status="sent",
+        )
+        failed = EmailQueue.objects.create(
+            recipient=self.user, email_type="instant", subject="Bad", body_html="x", body_text="x", status="failed",
+        )
+        response = self.client.post(reverse("cron-clear-pending"), **self.headers)
+        self.assertEqual(response.data["deleted"], 1)
+        self.assertFalse(EmailQueue.objects.filter(pk=self.email.pk).exists())
+        self.assertTrue(EmailQueue.objects.filter(pk__in=[sent.pk, failed.pk]).count() == 2)
+
+    def test_clear_pending_requires_secret(self):
+        response = self.client.post(reverse("cron-clear-pending"), HTTP_X_CRON_SECRET="nope")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(EmailQueue.objects.filter(pk=self.email.pk).exists())
+
+    def test_clear_pending_rejects_get(self):
+        response = self.client.get(reverse("cron-clear-pending"), **self.headers)
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+        self.assertTrue(EmailQueue.objects.filter(pk=self.email.pk).exists())
+
     def test_stats_endpoint_reports_pending(self):
         response = self.client.get(reverse("cron-stats"), {"secret": "test-cron-secret"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)
