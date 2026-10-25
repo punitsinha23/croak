@@ -25,6 +25,7 @@ from .serializers import (
     GoogleLoginSerializer,
 )
 from .models import OTP, PendingSignup
+from croak.notify import send_in_background
 
 User = get_user_model()
 
@@ -47,18 +48,7 @@ def unique_username_from_email(email):
 
 def send_otp_email(email, otp):
     """Send OTP to the email using external mail service in the background."""
-    def _send():
-        try:
-            requests.post(
-                f"{os.getenv('NOTIFICATIONS_SERVICE_URL', 'https://croak-notifications.vercel.app')}/send-otp-email",
-                json={"to": email, "otp": otp},
-                timeout=10,
-            )
-        except Exception as e:
-            print(f"Error sending OTP email: {e}")
-
-    thread = threading.Thread(target=_send)
-    thread.start()
+    send_in_background("/send-otp-email", {"to": email, "otp": otp})
     return True  # Always return True as it's now async
 
 class RequestPasswordResetView(APIView):
@@ -313,6 +303,8 @@ class VerifyOtpView(APIView):
             )
             user.save()
             pending.delete()
+
+        send_in_background("/send-signup-email", {"to": user.email, "username": user.first_name or user.username})
 
         update_last_login(None, user)
         refresh = RefreshToken.for_user(user)

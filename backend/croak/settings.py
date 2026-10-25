@@ -228,3 +228,7 @@ DEFAULT_FROM_EMAIL = "sinhapunit323@gmail.com"
 
 # Notifications Service
 NOTIFICATIONS_SERVICE_URL = os.getenv("NOTIFICATIONS_SERVICE_URL", "https://croak-notifications.vercel.app")
+NOTIFICATIONS_SECRET = os.getenv("NOTIFICATIONS_SECRET", "")
+if TESTING:
+    NOTIFICATIONS_SERVICE_URL = "http://127.0.0.1:9"
+    NOTIFICATIONS_SECRET = "test-notify-secret"

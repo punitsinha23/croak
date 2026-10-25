@@ -386,6 +386,33 @@ class InteractionNotificationTests(TestCase):
         self.assertEqual(Notification.objects.count(), 0)
 
 
+class CommentEmailTests(TestCase):
+
+    def setUp(self):
+        self.author = create_user(username="poster3", email="poster3@test.com")
+        self.commenter = create_user(username="talker", email="talker@test.com")
+        self.ribbit = create_ribbit(self.author)
+        self.url = reverse("comments", kwargs={"pk": self.ribbit.pk})
+
+    @patch("ribbits.views.send_in_background")
+    def test_post_author_gets_comment_email(self, mock_send):
+        get_auth_client(self.commenter).post(self.url, {"text": "Great point"})
+        mock_send.assert_called_once_with("/send-comment-email", {
+            "to": "poster3@test.com", "username": "talker", "comment": "Great point",
+        })
+
+    @patch("ribbits.views.send_in_background")
+    def test_no_email_when_author_turned_comment_emails_off(self, mock_send):
+        EmailPreferences.objects.create(user=self.author, email_on_comment=False)
+        get_auth_client(self.commenter).post(self.url, {"text": "Hello"})
+        mock_send.assert_not_called()
+
+    @patch("ribbits.views.send_in_background")
+    def test_no_email_for_commenting_on_own_post(self, mock_send):
+        get_auth_client(self.author).post(self.url, {"text": "Me again"})
+        mock_send.assert_not_called()
+
+
 class ReplyTests(TestCase):
 
     def setUp(self):

@@ -268,6 +268,7 @@ GOOGLE_CLIENT_ID=...
 
 # Email sending
 NOTIFICATIONS_SERVICE_URL=https://croak-notifications.vercel.app
+NOTIFICATIONS_SECRET=...   # same value as the notifications service's NOTIFICATIONS_SECRET
 APP_PASSWORD=...
 
 # Protects the cron endpoints. Always set this to a long random value

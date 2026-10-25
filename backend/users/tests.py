@@ -391,6 +391,31 @@ class FastLoginTests(TestCase):
         self.assertEqual(response.json(), {"status": "ok"})
 
 
+class NotificationsServiceTests(TestCase):
+
+    def test_tests_can_never_reach_the_real_service(self):
+        from django.conf import settings
+        self.assertEqual(settings.NOTIFICATIONS_SERVICE_URL, "http://127.0.0.1:9")
+
+    @patch("croak.notify.requests.post")
+    def test_requests_carry_the_shared_secret(self, mock_post):
+        from croak.notify import post_to_notifications
+        post_to_notifications("/send-otp-email", {"to": "a@b.c", "otp": "123456"})
+        self.assertEqual(mock_post.call_args.kwargs["headers"], {"X-Notify-Secret": "test-notify-secret"})
+        self.assertEqual(mock_post.call_args.args[0], "http://127.0.0.1:9/send-otp-email")
+
+    @patch("users.views.send_in_background")
+    def test_verifying_signup_sends_welcome_email(self, mock_send):
+        with patch("users.views.send_otp_email") as mock_otp:
+            APIClient().post(reverse("register"), {
+                "username": "welcome", "email": "welcome@example.com", "first_name": "Wel",
+                "password": "StrongPass123!", "password2": "StrongPass123!",
+            })
+        otp = mock_otp.call_args[0][1]
+        APIClient().post(reverse("verify_otp"), {"email": "welcome@example.com", "otp": otp})
+        mock_send.assert_called_once_with("/send-signup-email", {"to": "welcome@example.com", "username": "Wel"})
+
+
 class TokenLifetimeTests(TestCase):
 
     def setUp(self):

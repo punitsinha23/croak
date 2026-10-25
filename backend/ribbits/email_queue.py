@@ -8,6 +8,7 @@ from .models import EmailQueue, EmailPreferences, Notification
 from datetime import timedelta
 import requests
 from django.conf import settings
+from croak.notify import post_to_notifications
 
 User = get_user_model()
 
@@ -188,18 +189,12 @@ def send_email_via_service(email):
     """
     try:
         # Get notification service URL from settings
-        service_url = getattr(settings, 'NOTIFICATIONS_SERVICE_URL', 'https://croak-notifications.vercel.app')
-        
-        response = requests.post(
-            f"{service_url}/send-queued-email",
-            json={
-                "to": email.recipient.email,
-                "subject": email.subject,
-                "html": email.body_html,
-                "text": email.body_text
-            },
-            timeout=10
-        )
+        response = post_to_notifications("/send-queued-email", {
+            "to": email.recipient.email,
+            "subject": email.subject,
+            "html": email.body_html,
+            "text": email.body_text,
+        })
         
         if response.status_code == 200:
             mark_email_sent(email.id)

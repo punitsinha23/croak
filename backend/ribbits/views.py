@@ -15,6 +15,8 @@ from django.conf import settings
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.pagination import CursorPagination
 import requests
+from croak.notify import post_to_notifications, send_in_background
+from .email_queue import should_send_email
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAdminUser
 
@@ -229,6 +231,12 @@ class CommentApiView(generics.ListCreateAPIView):
                 post=ribbit,
                 message='commented on your post'
             )
+            if ribbit.author.email and should_send_email(ribbit.author, 'comment'):
+                send_in_background("/send-comment-email", {
+                    "to": ribbit.author.email,
+                    "username": self.request.user.username,
+                    "comment": comment.text,
+                })
 
 class CommentDeleteView(generics.DestroyAPIView):
     queryset = Comment.objects.all()
@@ -338,7 +346,7 @@ def send_update_email(subject, message):
         "recipients": emails,
     }
 
-    r = requests.post("https://croak-notifications.vercel.app/send-bulk", json=payload)
+    r = post_to_notifications("/send-bulk", payload, timeout=60)
     return r.json()
 
 @api_view(["POST"])
