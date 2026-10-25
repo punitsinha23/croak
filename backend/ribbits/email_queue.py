@@ -124,6 +124,44 @@ def get_pending_emails(limit=100):
     ).order_by('priority', 'scheduled_for')[:limit]
 
 
+STALE_CLAIM_MINUTES = 10
+
+
+def send_due_emails(limit=100, time_budget_seconds=20):
+    import time
+    from django.db import transaction
+
+    deadline = time.monotonic() + time_budget_seconds
+    EmailQueue.objects.filter(
+        status="processing", claimed_at__lt=timezone.now() - timedelta(minutes=STALE_CLAIM_MINUTES)
+    ).update(status="pending")
+
+    attempted = []
+    sent = 0
+    while len(attempted) < limit and time.monotonic() < deadline:
+        with transaction.atomic():
+            email = (
+                EmailQueue.objects.select_for_update(skip_locked=True)
+                .filter(status="pending", scheduled_for__lte=timezone.now(), retry_count__lt=3)
+                .exclude(pk__in=attempted)
+                .order_by("priority", "scheduled_for")
+                .first()
+            )
+            if email is None:
+                break
+            email.status = "processing"
+            email.claimed_at = timezone.now()
+            email.save(update_fields=["status", "claimed_at"])
+
+        attempted.append(email.pk)
+        try:
+            sent += bool(send_email_via_service(email))
+        except Exception as e:
+            mark_email_failed(email.id, str(e))
+
+    return len(attempted), sent, len(attempted) - sent
+
+
 def mark_email_sent(email_id):
     """Mark an email as successfully sent"""
     EmailQueue.objects.filter(id=email_id).update(

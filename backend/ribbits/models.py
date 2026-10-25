@@ -108,6 +108,7 @@ class EmailQueue(models.Model):
     priority = models.IntegerField(default=5, db_index=True)  # 1=highest, 10=lowest
     scheduled_for = models.DateTimeField(default=timezone.now, db_index=True)
     sent_at = models.DateTimeField(null=True, blank=True)
+    claimed_at = models.DateTimeField(null=True, blank=True)
     error_message = models.TextField(blank=True)
     retry_count = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)

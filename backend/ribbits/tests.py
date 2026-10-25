@@ -566,6 +566,60 @@ class CronEndpointTests(TestCase):
         self.assertEqual(response.data["sent"], 0)
         mock_post.assert_not_called()
 
+    @patch("ribbits.email_queue.requests.post")
+    def test_each_email_is_sent_only_once_across_runs(self, mock_post):
+        from .email_queue import send_due_emails
+        mock_post.return_value.status_code = 200
+        self.assertEqual(send_due_emails(), (1, 1, 0))
+        self.assertEqual(send_due_emails(), (0, 0, 0))
+        self.assertEqual(mock_post.call_count, 1)
+
+    def test_run_stops_when_time_budget_is_used_up(self):
+        from .email_queue import send_due_emails
+        with patch("ribbits.email_queue.requests.post") as mock_post:
+            self.assertEqual(send_due_emails(time_budget_seconds=0), (0, 0, 0))
+        mock_post.assert_not_called()
+        self.email.refresh_from_db()
+        self.assertEqual(self.email.status, "pending")
+
+    @patch("ribbits.email_queue.requests.post")
+    def test_email_stuck_in_processing_is_retried_later(self, mock_post):
+        from datetime import timedelta
+        from django.utils import timezone
+        from .email_queue import send_due_emails
+        mock_post.return_value.status_code = 200
+        EmailQueue.objects.update(status="processing", claimed_at=timezone.now() - timedelta(minutes=11))
+        self.assertEqual(send_due_emails(), (1, 1, 0))
+        self.email.refresh_from_db()
+        self.assertEqual(self.email.status, "sent")
+
+    @patch("ribbits.email_queue.requests.post")
+    def test_email_claimed_moments_ago_is_left_to_its_run(self, mock_post):
+        from django.utils import timezone
+        from .email_queue import send_due_emails
+        EmailQueue.objects.update(status="processing", claimed_at=timezone.now())
+        self.assertEqual(send_due_emails(), (0, 0, 0))
+        mock_post.assert_not_called()
+
+    @patch("ribbits.email_queue.requests.post")
+    def test_each_sent_email_is_recorded_immediately(self, mock_post):
+        from .email_queue import send_due_emails
+        second = EmailQueue.objects.create(
+            recipient=self.user, email_type="instant", subject="Two", body_html="<p>2</p>", body_text="2",
+        )
+        statuses_seen_during_second_send = []
+
+        def fake_post(*args, **kwargs):
+            if kwargs["json"]["subject"] == "Two":
+                statuses_seen_during_second_send.append(EmailQueue.objects.get(pk=self.email.pk).status)
+            return type("Response", (), {"status_code": 200})()
+
+        mock_post.side_effect = fake_post
+        send_due_emails()
+        self.assertEqual(statuses_seen_during_second_send, ["sent"])
+        second.refresh_from_db()
+        self.assertEqual(second.status, "sent")
+
     def test_stats_endpoint_reports_pending(self):
         response = self.client.get(reverse("cron-stats"), {"secret": "test-cron-secret"})
         self.assertEqual(response.status_code, status.HTTP_200_OK)

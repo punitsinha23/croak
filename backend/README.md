@@ -147,6 +147,7 @@ Email is deliberately kept **out of the request path**:
    - `daily-digest` at 09:00 UTC
    - `weekly-nudges` on Mondays at 10:00 UTC
    - `evening-checkin` at 14:00 UTC (7:30 PM IST), which queues emails timed for 8:00 PM IST so that GitHub's late scheduled runs don't make them late
+   GitHub throttles scheduled workflows on quiet repositories (the 5-minute job often runs only every few hours) and can drop runs entirely, so in production the same endpoints are also called by a free external scheduler such as [cron-job.org](https://cron-job.org): `process-emails` every 5 minutes, which also keeps the Render instance awake, and `evening-checkin` daily at 19:30 Asia/Kolkata. Each run claims one email at a time (`select_for_update(skip_locked=True)`, then status `processing` with a `claimed_at` time), records each result immediately, and stops starting new sends after about 20 seconds so it finishes before the schedulers' and gunicorn's 30-second cutoff. Two schedulers firing at once can't send the same email twice, a run that dies mid-send can't cause duplicates, and anything left in `processing` for over 10 minutes goes back to the queue.
 4. **Results are written back.** Success sets `sent` and `sent_at`. Failure stores the error and retries on later runs. After 3 failed attempts the email is marked `failed` and left alone.
 
 `/api/ribbit/cron/stats/` reports pending, failed and sent-today counts. The same jobs exist as management commands (`process_email_queue`, `send_daily_digests`, …) for running by hand.

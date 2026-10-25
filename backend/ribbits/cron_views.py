@@ -6,7 +6,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from django.conf import settings
-from ribbits.email_queue import get_pending_emails, send_email_via_service
+from ribbits.email_queue import send_due_emails
 from ribbits.models import EmailPreferences, EmailQueue
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -40,10 +40,8 @@ def process_email_queue_endpoint(request):
         return Response({'error': 'Unauthorized'}, status=403)
     
     try:
-        # Get pending emails
-        pending_emails = get_pending_emails(limit=100)
-        total = len(pending_emails)
-        
+        total, sent_count, failed_count = send_due_emails(limit=100)
+
         if total == 0:
             return Response({
                 'status': 'success',
@@ -51,22 +49,7 @@ def process_email_queue_endpoint(request):
                 'sent': 0,
                 'failed': 0
             })
-        
-        # Process emails
-        sent_count = 0
-        failed_count = 0
-        
-        for email in pending_emails:
-            try:
-                success = send_email_via_service(email)
-                if success:
-                    sent_count += 1
-                else:
-                    failed_count += 1
-            except Exception as e:
-                failed_count += 1
-                print(f"Error sending email {email.id}: {str(e)}")
-        
+
         return Response({
             'status': 'success',
             'total_processed': total,
