@@ -481,6 +481,7 @@ Never put a backend secret in a `VITE_*` variable: those are compiled into the J
 | `VITE_PROD_URL` (`https://croak-bqg0.onrender.com/api/`) | | ✔ | | | |
 | `VITE_GIPHY_API_KEY` | | ✔ | | | |
 | `EMAIL` / `PASSWORD` (Gmail + app password) | | | ✔ | | |
+| `SENDER_NAME` (optional, default `Croak`) | | | ✔ | | |
 
 The notifications repo has a `.env.example` listing its three variables; the real `.env` is git-ignored.
 

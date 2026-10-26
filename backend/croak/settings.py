@@ -218,14 +218,6 @@ CLOUDINARY_STORAGE = {
     'API_SECRET': os.getenv('CLOUDINARY_API_SECRET'),
 }
 
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = "sinhapunit323@gmail.com"
-EMAIL_HOST_PASSWORD = os.getenv("APP_PASSWORD")
-DEFAULT_FROM_EMAIL = "sinhapunit323@gmail.com"
-
 # Notifications Service
 NOTIFICATIONS_SERVICE_URL = os.getenv("NOTIFICATIONS_SERVICE_URL", "https://croak-notifications.vercel.app")
 NOTIFICATIONS_SECRET = os.getenv("NOTIFICATIONS_SECRET", "")
